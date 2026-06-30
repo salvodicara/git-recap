@@ -36,8 +36,14 @@ Files land at `<journal_root>/<profile>/<year>/<filename>.md`, e.g.
 go install github.com/salvodicara/git-recap@latest
 ```
 
-This drops the `git-recap` binary in your `~/go/bin`; make sure that's on your
-`PATH`.
+This drops the `git-recap` binary in your Go bin directory (`go env GOPATH`/bin,
+usually `~/go/bin`). That must be on your `PATH` — if `git-recap` isn't found
+after install, add it:
+
+```sh
+echo 'export PATH="$HOME/go/bin:$PATH"' >> ~/.zshrc   # or ~/.bashrc
+exec $SHELL
+```
 
 **From source:**
 
