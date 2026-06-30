@@ -13,10 +13,10 @@ import (
 const usage = `git-recap — reconstruct a work journal from git history
 
 Usage:
-  git-recap [flags]      generate a journal for a period
-  git-recap init         first-run setup (scan repos, pick a profile)
+  git-recap [flags]      generate a journal (no flags on a terminal = interactive)
+  git-recap config       view or change configuration
 
-Flags:
+Generate flags:
   --profile NAME         profile to use (default: config's default_profile)
   --org A,B              only these orgs (overrides profile selection)
   --repo X,Y             only these repo names (overrides profile selection)
@@ -25,12 +25,21 @@ Flags:
   --to YYYY-MM-DD         custom range end, inclusive (use with --from)
   --pick                 interactively fuzzy-pick repos for this run
 
-With no flags, the default profile is used non-interactively.`
+Configure — edit single fields from the CLI (git-recap config ...):
+  (no flags on a terminal opens an interactive editor for every setting)
+  --journal-root PATH    where recaps are written
+  --roots A,B            workspace roots to scan
+  --default-profile NAME profile used when none is given
+  --profile NAME         create/update a profile (with --orgs/--repos/--emails)
+  --delete-profile NAME  remove a profile
+
+Run bare on a terminal to pick profile and period interactively; piped or with
+any flag, git-recap runs non-interactively.`
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "init" {
-		if err := runInit(); err != nil {
-			fmt.Fprintln(os.Stderr, "init:", err)
+	if len(os.Args) > 1 && os.Args[1] == "config" {
+		if err := runConfig(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "config:", err)
 			os.Exit(1)
 		}
 		return
@@ -56,16 +65,27 @@ func runGenerate(argv []string) error {
 	if err := fs.Parse(argv); err != nil {
 		return err
 	}
-	if !validPeriods[*period] {
-		return fmt.Errorf("invalid --period %q (day|week|month|quarter|year)", *period)
-	}
 
 	cfg, cfgPath, err := loadConfig()
 	if os.IsNotExist(err) {
-		return fmt.Errorf("no config at %s — run `git-recap init` first", cfgPath)
+		return fmt.Errorf("no config at %s — run `git-recap config` first", cfgPath)
 	}
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", cfgPath, err)
+	}
+
+	// Bare run on a terminal → interactive selection. Any flag, or no TTY
+	// (pipe/cron/agent), keeps the non-interactive path below.
+	interactive := fs.NFlag() == 0 && isInteractive()
+	if interactive {
+		if err := interactiveGenerate(cfg, profileFlag, period); err != nil {
+			return err
+		}
+		fmt.Fprintln(os.Stderr, "Scanning your workspace for repos…")
+	}
+
+	if !validPeriods[*period] {
+		return fmt.Errorf("invalid --period %q (day|week|month|quarter|year)", *period)
 	}
 
 	discovered := discoverRepos(cfg.WorkspaceRoots)
@@ -81,8 +101,11 @@ func runGenerate(argv []string) error {
 	)
 
 	if *pick {
-		// Ad-hoc interactive selection; output filed under the default profile.
-		profileName = cfg.DefaultProfile
+		// Ad-hoc interactive selection; filed under the chosen/default profile.
+		profileName = *profileFlag
+		if profileName == "" {
+			profileName = cfg.DefaultProfile
+		}
 		if profileName == "" {
 			profileName = "adhoc"
 		}
