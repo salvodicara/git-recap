@@ -4,5 +4,8 @@ config.toml
 # Built binary
 /git-recap
 
+# GoReleaser output
+/dist/
+
 # Go
 *.test

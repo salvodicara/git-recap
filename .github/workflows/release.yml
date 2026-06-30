@@ -1,0 +1,29 @@
+name: Release
+
+# Backup path — you normally release locally with `just release X.Y.Z`.
+# Pushing a v* tag builds prebuilt binaries and attaches them to the release.
+# (The Homebrew tap is updated by `just release`, not here.)
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

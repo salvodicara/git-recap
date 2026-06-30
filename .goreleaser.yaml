@@ -1,0 +1,27 @@
+# GoReleaser builds prebuilt binaries and attaches them to the GitHub release.
+# The Homebrew tap is handled separately (build-from-source) by `just release`.
+version: 2
+
+project_name: git-recap
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env: [CGO_ENABLED=0]
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  # `just release` creates the release first; GoReleaser just adds binaries to it.
+  mode: keep-existing

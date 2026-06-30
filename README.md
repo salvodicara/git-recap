@@ -144,6 +144,27 @@ cd ~/git-recap
 git add . && git commit -m "journal: June 2026"
 ```
 
+## Development
+
+Common tasks run through [`just`](https://github.com/casey/just):
+
+```sh
+just            # list tasks
+just check      # build, vet, test, gofmt
+just lint       # staticcheck + modernize
+just run --period week
+```
+
+Releases are cut locally (no CI minutes needed) — this tags, publishes a GitHub
+release, and updates the Homebrew tap at `../homebrew-tap`:
+
+```sh
+just release 0.2.0
+```
+
+GitHub Actions mirror this as a backup: `CI` runs the test gate on every push/PR,
+and `Release` builds prebuilt binaries when you push a `v*` tag.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
