@@ -1,0 +1,8 @@
+# Per-user config (written by `git-recap init`), never committed
+config.toml
+
+# Built binary
+/git-recap
+
+# Go
+*.test
