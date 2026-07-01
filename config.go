@@ -15,7 +15,7 @@ import (
 // rarely hand-edit it.
 type Config struct {
 	WorkspaceRoots []string           `toml:"workspace_roots"`
-	JournalRoot    string             `toml:"journal_root"`
+	RecapsFolder   string             `toml:"recaps_folder"`
 	DefaultProfile string             `toml:"default_profile"`
 	Profiles       map[string]Profile `toml:"profiles"`
 }
@@ -113,11 +113,35 @@ func (c *Config) profile(name string) (Profile, string, error) {
 // defaultConfig is the starting point for a brand-new config (no file yet).
 func defaultConfig() *Config {
 	home, _ := os.UserHomeDir()
+	ws := filepath.Join(home, "Workspace")
 	return &Config{
-		WorkspaceRoots: []string{filepath.Join(home, "Workspace")},
-		JournalRoot:    "~/git-recap",
+		WorkspaceRoots: []string{ws},
+		RecapsFolder:   filepath.Join(ws, "my-recaps"),
 		Profiles:       map[string]Profile{},
 	}
+}
+
+// defaultRecapsFolder puts recaps under the first workspace root (falling back
+// to ~/Workspace), as a sibling "my-recaps" folder meant to be its own git repo.
+func defaultRecapsFolder(roots []string) string {
+	base := ""
+	if len(roots) > 0 {
+		base = strings.TrimSpace(roots[0])
+	}
+	if base == "" {
+		home, _ := os.UserHomeDir()
+		base = filepath.Join(home, "Workspace")
+	}
+	return filepath.Join(expandTilde(base), "my-recaps")
+}
+
+// recapsFolder is the configured recaps folder, or the computed default when
+// unset (e.g. a config written before this field existed).
+func (c *Config) recapsFolder() string {
+	if strings.TrimSpace(c.RecapsFolder) != "" {
+		return c.RecapsFolder
+	}
+	return defaultRecapsFolder(c.WorkspaceRoots)
 }
 
 // isInteractive reports whether we can safely drive a terminal UI: both stdin
@@ -137,8 +161,8 @@ func applyConfigFlags(cfg *Config, set map[string]string) error {
 	if cfg.Profiles == nil {
 		cfg.Profiles = map[string]Profile{}
 	}
-	if v, ok := set["journal-root"]; ok {
-		cfg.JournalRoot = strings.TrimSpace(v)
+	if v, ok := set["recaps-folder"]; ok {
+		cfg.RecapsFolder = strings.TrimSpace(v)
 	}
 	if v, ok := set["roots"]; ok {
 		cfg.WorkspaceRoots = splitCSV(v)
@@ -192,7 +216,7 @@ With flags, applies them non-interactively (for scripts/agents). With no flags
 and no terminal, prints the current config.
 
 Flags (each replaces the field):
-  --journal-root PATH      where recaps are written
+  --recaps-folder PATH     where recaps are written
   --roots A,B              workspace roots to scan (comma-separated)
   --default-profile NAME   profile used when none is given
   --profile NAME           create/update this profile, with:
@@ -206,7 +230,7 @@ Flags (each replaces the field):
 func runConfig(argv []string) error {
 	fs := flag.NewFlagSet("git-recap config", flag.ContinueOnError)
 	fs.Usage = func() { fmt.Fprintln(os.Stderr, configUsage) }
-	fs.String("journal-root", "", "set journal_root")
+	fs.String("recaps-folder", "", "set recaps_folder")
 	fs.String("roots", "", "set workspace_roots (comma-separated)")
 	fs.String("default-profile", "", "set default_profile")
 	fs.String("profile", "", "profile to create/update")

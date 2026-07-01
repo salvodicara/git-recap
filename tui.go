@@ -54,24 +54,21 @@ func pickRepos(repos []Repo, preChecked map[string]bool) ([]Repo, error) {
 	return reposByPath(repos, chosen), nil
 }
 
-// interactiveConfig is the on-rails editor for every setting: roots, journal
-// root, profiles (add/edit/delete) and the default profile. It edits cfg in
+// interactiveConfig is the on-rails editor for every setting: roots, recaps
+// folder, profiles (add/edit/delete) and the default profile. It edits cfg in
 // place (pre-filled from current values) and saves.
 func interactiveConfig(cfg *Config) error {
 	rootsStr := strings.Join(cfg.WorkspaceRoots, ", ")
-	journal := cfg.JournalRoot
-	if journal == "" {
-		journal = "~/git-recap"
-	}
+	recaps := cfg.recapsFolder()
 	if err := huh.NewForm(huh.NewGroup(
 		huh.NewInput().
 			Title("Workspace root(s) to scan").
 			Description("Comma-separated; where your clones live.").
 			Value(&rootsStr),
 		huh.NewInput().
-			Title("Journal root").
-			Description("Where recaps are written.").
-			Value(&journal),
+			Title("Recaps folder").
+			Description("Where recaps are written (its own git repo; commit it).").
+			Value(&recaps),
 	)).Run(); err != nil {
 		return err
 	}
@@ -80,7 +77,7 @@ func interactiveConfig(cfg *Config) error {
 		return fmt.Errorf("no workspace roots given")
 	}
 	cfg.WorkspaceRoots = roots
-	cfg.JournalRoot = strings.TrimSpace(journal)
+	cfg.RecapsFolder = strings.TrimSpace(recaps)
 
 	fmt.Println("Scanning for git repos…")
 	repos := discoverRepos(roots)

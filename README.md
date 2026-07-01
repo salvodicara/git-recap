@@ -34,8 +34,8 @@ One markdown file per run, days as sections, grouped by repo:
 - `8779a77` 14:32 — Fix null check in parser
 ```
 
-Files land at `<journal_root>/<profile>/<year>/<filename>.md`, e.g.
-`~/git-recap/work/2026/2026-06.md`. Regenerate anytime — output is idempotent.
+Files land at `<recaps_folder>/<profile>/<year>/<filename>.md`, e.g.
+`~/Workspace/my-recaps/work/2026/2026-06.md`. Regenerate anytime — output is idempotent.
 
 ## Install
 
@@ -125,15 +125,15 @@ repo's `origin` remote, so many orgs can group into one profile.
 
 `git-recap config` is the single command for everything in
 `~/.config/git-recap/config.toml` (which is git-ignored). On a terminal it
-opens an interactive editor for **every** setting — workspace roots, journal
-root, profiles (add/edit/delete), default profile. You never have to hand-edit
+opens an interactive editor for **every** setting — workspace roots, recaps
+folder, profiles (add/edit/delete), default profile. You never have to hand-edit
 the file.
 
 For scripts and agents, pass flags to set values non-interactively (each flag
 replaces that field):
 
 ```sh
-git-recap config --journal-root ~/journal
+git-recap config --recaps-folder ~/Workspace/my-recaps
 git-recap config --roots ~/Work,~/oss          # workspace roots to scan
 git-recap config --default-profile personal
 git-recap config --profile work --orgs acme,acme-labs --emails me@co.com
@@ -149,15 +149,15 @@ line:
 git-recap config --roots ~/Work --profile work --orgs acme --emails me@co.com
 ```
 
-## Keeping the journal in git
+## Keeping the recaps in git
 
-`journal_root` defaults to `~/git-recap` and is initialized as its own git repo
-on first write. `git-recap` **never commits or pushes** — that's left entirely
-to you:
+The **recaps folder** defaults to `<first workspace root>/my-recaps` (e.g.
+`~/Workspace/my-recaps`) and is initialized as its own git repo on first write.
+`git-recap` **never commits or pushes** — that's left entirely to you:
 
 ```sh
-cd ~/git-recap
-git add . && git commit -m "journal: June 2026"
+cd ~/Workspace/my-recaps
+git add . && git commit -m "recaps: June 2026"
 ```
 
 ## Development

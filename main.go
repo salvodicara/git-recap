@@ -73,7 +73,7 @@ Generate flags:
 
 Configure — edit single fields from the CLI (git-recap config ...):
   (no flags on a terminal opens an interactive editor for every setting)
-  --journal-root PATH    where recaps are written
+  --recaps-folder PATH   where recaps are written
   --roots A,B            workspace roots to scan
   --default-profile NAME profile used when none is given
   --profile NAME         create/update a profile (with --orgs/--repos/--emails)
@@ -216,7 +216,7 @@ func runGenerate(argv []string) error {
 	}
 
 	heading := fmt.Sprintf("%s — %s", profileName, name)
-	out, err := writeJournal(cfg.JournalRoot, profileName, year, name, renderMarkdown(heading, all))
+	out, err := writeJournal(cfg.recapsFolder(), profileName, year, name, renderMarkdown(heading, all))
 	if err != nil {
 		return err
 	}

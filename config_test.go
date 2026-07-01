@@ -9,15 +9,15 @@ func TestApplyConfigFlags(t *testing.T) {
 	t.Run("scalars replace fields", func(t *testing.T) {
 		cfg := &Config{Profiles: map[string]Profile{"work": {}}}
 		err := applyConfigFlags(cfg, map[string]string{
-			"journal-root":    "~/j",
+			"recaps-folder":   "~/j",
 			"roots":           "~/a, ~/b",
 			"default-profile": "work",
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if cfg.JournalRoot != "~/j" {
-			t.Errorf("journal root = %q", cfg.JournalRoot)
+		if cfg.RecapsFolder != "~/j" {
+			t.Errorf("recaps folder = %q", cfg.RecapsFolder)
 		}
 		if !slices.Equal(cfg.WorkspaceRoots, []string{"~/a", "~/b"}) {
 			t.Errorf("roots = %v", cfg.WorkspaceRoots)

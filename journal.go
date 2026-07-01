@@ -204,10 +204,10 @@ func shortHash(h string) string {
 	return h
 }
 
-// writeJournal writes content to journalRoot/<profile>/<year>/<name>.md and
-// ensures journalRoot is a git repo. It never commits.
-func writeJournal(journalRoot, profile, year, name, content string) (string, error) {
-	root := expandTilde(journalRoot)
+// writeJournal writes content to recapsFolder/<profile>/<year>/<name>.md and
+// ensures recapsFolder is a git repo. It never commits.
+func writeJournal(recapsFolder, profile, year, name, content string) (string, error) {
+	root := expandTilde(recapsFolder)
 	dir := filepath.Join(root, profile, year)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
