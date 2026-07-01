@@ -87,7 +87,7 @@ any flag, git-recap runs non-interactively.`
 
 func main() {
 	if len(os.Args) > 1 {
-		switch os.Args[1] {
+		switch arg := os.Args[1]; arg {
 		case "config":
 			if err := runConfig(os.Args[2:]); err != nil {
 				fmt.Fprintln(os.Stderr, "config:", err)
@@ -97,6 +97,14 @@ func main() {
 		case "version", "--version", "-v":
 			fmt.Printf("git-recap %s\n", versionString())
 			return
+		case "help", "--help", "-h":
+			fmt.Println(usage)
+			return
+		default:
+			if !strings.HasPrefix(arg, "-") {
+				fmt.Fprintf(os.Stderr, "git-recap: unknown command %q\n\n%s\n", arg, usage)
+				os.Exit(1)
+			}
 		}
 	}
 	if err := runGenerate(os.Args[1:]); err != nil {
@@ -120,6 +128,9 @@ func runGenerate(argv []string) error {
 	)
 	if err := fs.Parse(argv); err != nil {
 		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unexpected argument %q (see `git-recap help`)", fs.Arg(0))
 	}
 
 	cfg, cfgPath, err := loadConfig()
