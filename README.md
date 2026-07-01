@@ -84,6 +84,7 @@ settings — it's the one command for all configuration.
 ```
 git-recap [flags]      generate a journal for a period
 git-recap config       view or change configuration
+git-recap version      print the version (also --version, -v)
 
   --profile NAME        profile to use (default: config's default_profile)
   --org A,B             only these orgs (overrides profile selection)

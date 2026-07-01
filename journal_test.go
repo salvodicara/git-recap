@@ -102,6 +102,15 @@ func TestResolveRangePresets(t *testing.T) {
 	}
 }
 
+func TestVersionStringLdflags(t *testing.T) {
+	old := version
+	defer func() { version = old }()
+	version = "v9.9.9"
+	if got := versionString(); got != "v9.9.9" {
+		t.Errorf("versionString() = %q, want v9.9.9", got)
+	}
+}
+
 func TestGroupByDay(t *testing.T) {
 	mk := func(day, hh int) Commit {
 		return Commit{When: time.Date(2026, 6, day, hh, 0, 0, 0, time.UTC), Repo: Repo{Name: "r"}}

@@ -6,15 +6,56 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime/debug"
 	"strings"
 	"time"
 )
+
+// version is stamped by release builds via -ldflags "-X main.version=vX.Y.Z"
+// (goreleaser and the Homebrew formula). Left empty for `go install`, where it
+// falls back to the module/VCS info the Go toolchain embeds automatically.
+var version = ""
+
+// versionString reports the build version across every install channel:
+// the ldflags stamp if present, else the installed module version, else the
+// VCS revision of a local build.
+func versionString() string {
+	if version != "" {
+		return version
+	}
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "(unknown)"
+	}
+	if v := info.Main.Version; v != "" && v != "(devel)" {
+		return v // installed via `go install module@version`
+	}
+	var rev, dirty string
+	for _, s := range info.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			rev = s.Value
+		case "vcs.modified":
+			if s.Value == "true" {
+				dirty = "-dirty"
+			}
+		}
+	}
+	if rev != "" {
+		if len(rev) > 12 {
+			rev = rev[:12]
+		}
+		return "devel-" + rev + dirty
+	}
+	return "(devel)"
+}
 
 const usage = `git-recap — reconstruct a work journal from git history
 
 Usage:
   git-recap [flags]      generate a journal (no flags on a terminal = interactive)
   git-recap config       view or change configuration
+  git-recap version      print the version (also --version, -v)
 
 Generate flags:
   --profile NAME         profile to use (default: config's default_profile)
@@ -42,12 +83,18 @@ Run bare on a terminal to pick profile and period interactively; piped or with
 any flag, git-recap runs non-interactively.`
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "config" {
-		if err := runConfig(os.Args[2:]); err != nil {
-			fmt.Fprintln(os.Stderr, "config:", err)
-			os.Exit(1)
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "config":
+			if err := runConfig(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, "config:", err)
+				os.Exit(1)
+			}
+			return
+		case "version", "--version", "-v":
+			fmt.Printf("git-recap %s\n", versionString())
+			return
 		}
-		return
 	}
 	if err := runGenerate(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "git-recap:", err)
