@@ -14,7 +14,8 @@ Because the binary is named `git-recap`, git also picks it up as a subcommand:
 `git recap` works anywhere `git-recap` does.
 
 - **Zero setup, zero services.** Reads local git history — nothing to host, no API keys, no tracking.
-- **Any period.** Day, week, month, quarter, year, or a custom `--from`/`--to` range.
+- **Any period.** Presets like `today`, `last-week`, `last-month`, `last-7-days`, the current day/week/month/quarter/year, or a custom `--from`/`--to` range.
+- **Every branch.** Counts your commits across *all* branches (local and remote), so unmerged or in-review work still shows up — not just what's on the current branch.
 - **Profiles.** Group repos by org or name and count only your commits, by author email.
 - **Human *and* script friendly.** An interactive TUI in your terminal; full flags for agents and CI.
 
@@ -67,9 +68,10 @@ cd git-recap
 
 ```sh
 git-recap config        # first run: scan repos, pick some, name a profile
-git-recap               # interactive: pick a period and go
-git recap --period week # scripted: this week, as a git subcommand
-git recap --pick        # fuzzy-pick repos ad hoc
+git-recap               # interactive: pick a period (or custom range) and go
+git recap --period week        # scripted: this week, as a git subcommand
+git recap --period last-month  # the month that just ended
+git recap --pick               # fuzzy-pick repos ad hoc
 ```
 
 `git-recap config` discovers git repos under your workspace root(s), lets you
@@ -86,20 +88,33 @@ git-recap config       view or change configuration
   --profile NAME        profile to use (default: config's default_profile)
   --org A,B             only these orgs (overrides profile selection)
   --repo X,Y            only these repo names (overrides profile selection)
-  --period PERIOD       day | week | month | quarter | year   (default: month)
+  --period PERIOD       a period preset (default: month):
+                          day/today, yesterday,
+                          week/this-week, last-week,
+                          month/this-month, last-month,
+                          quarter, year, last-7-days, last-30-days
   --from YYYY-MM-DD      custom range start (use with --to)
   --to YYYY-MM-DD        custom range end, inclusive (use with --from)
   --pick                interactively fuzzy-pick repos for this run
 ```
 
-- **Period** sets the default date range and the output filename:
-  `2026-06-30.md` (day), `2026-W27.md` (ISO week, Monday start), `2026-06.md`
-  (month), `2026-Q2.md` (quarter), `2026.md` (year).
-- **`--from`/`--to`** override the range for a custom window (both required).
-- **Run bare on a terminal** to pick the period (and profile, if you have more
-  than one) interactively. Piped, in CI, or with any flag, `git-recap` runs
-  non-interactively using the default profile. Add **`--pick`** to fuzzy-pick
-  repos for a single run.
+- **Period** sets the date range and output filename. Calendar presets name the
+  file after the window: `2026-06-30.md` (day), `2026-W27.md` (ISO week, Monday
+  start), `2026-06.md` (month), `2026-Q2.md` (quarter), `2026.md` (year).
+  The `this-*`/`last-*` variants select the current or previous window;
+  `today`/`yesterday` are day aliases.
+- **Rolling windows** (`last-7-days`, `last-30-days`) cover the last N *complete*
+  days and are named by their span, e.g. `2026-06-24_2026-06-30.md`.
+- **`--from`/`--to`** override everything for a custom window (both required,
+  `--to` inclusive); the file is named `<from>_<to>.md`, e.g.
+  `2026-05-03_2026-05-19.md`.
+- **All branches.** Commits are collected across every branch (local and
+  remote-tracking), filtered to your author email(s), so work you never merged or
+  checked back out is still captured. Merge commits are excluded as noise.
+- **Run bare on a terminal** to pick the period — or a custom range — (and
+  profile, if you have more than one) interactively. Piped, in CI, or with any
+  flag, `git-recap` runs non-interactively using the default profile. Add
+  **`--pick`** to fuzzy-pick repos for a single run.
 
 ## Profiles & config
 

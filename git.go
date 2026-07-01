@@ -98,14 +98,16 @@ func discoverRepos(roots []string) []Repo {
 }
 
 // scanCommits returns this repo's non-merge commits authored within [from, to)
-// by any of the given emails. Empty emails means any author.
+// by any of the given emails. Empty emails means any author. --all walks every
+// ref (local + remote branches, tags) so work on unmerged/unchecked-out
+// branches is included; git emits each commit once, so no dedup is needed.
 func scanCommits(repo Repo, from, to time.Time, emails []string) ([]Commit, error) {
 	const sep = "\x1f"
 	// ponytail: --since/--until filter by *commit* date; we want *author* date,
 	// so pad the git window and filter precisely in Go below. Avoids dropping a
 	// commit authored in-range but committed just outside it (rebases, late pushes).
 	args := []string{
-		"-C", repo.Path, "log", "--no-merges",
+		"-C", repo.Path, "log", "--no-merges", "--all",
 		"--since=" + from.Add(-36*time.Hour).Format(time.RFC3339),
 		"--until=" + to.Add(36*time.Hour).Format(time.RFC3339),
 		"--pretty=format:%H" + sep + "%aI" + sep + "%s",

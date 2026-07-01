@@ -10,31 +10,74 @@ import (
 	"time"
 )
 
-var validPeriods = map[string]bool{
-	"day": true, "week": true, "month": true, "quarter": true, "year": true,
+// preset is a calendar window: a unit (day/week/month/quarter/year) shifted
+// back by offset (0 = current, -1 = previous).
+type preset struct {
+	unit   string
+	offset int
 }
 
-// defaultRange returns [from, to) for a period containing ref. Weeks start Monday.
+// presets is the shared period vocabulary for both the CLI (--period) and the
+// interactive picker. Calendar-aligned windows only; rolling windows live in
+// rollingDays, custom windows use --from/--to.
+var presets = map[string]preset{
+	"day":        {"day", 0},
+	"today":      {"day", 0},
+	"yesterday":  {"day", -1},
+	"week":       {"week", 0},
+	"this-week":  {"week", 0},
+	"last-week":  {"week", -1},
+	"month":      {"month", 0},
+	"this-month": {"month", 0},
+	"last-month": {"month", -1},
+	"quarter":    {"quarter", 0},
+	"year":       {"year", 0},
+}
+
+// rollingDays maps a token to a window of the last N *complete* days (ending at
+// today 00:00, so it excludes today's in-progress work). Not calendar-aligned.
+var rollingDays = map[string]int{
+	"last-7-days":  7,
+	"last-30-days": 30,
+}
+
+// validPeriod reports whether a --period token is a known preset or rolling window.
+func validPeriod(p string) bool {
+	if _, ok := presets[p]; ok {
+		return true
+	}
+	_, ok := rollingDays[p]
+	return ok
+}
+
+// defaultRange returns [from, to) for the current period containing ref.
 func defaultRange(period string, ref time.Time) (from, to time.Time) {
+	return calendarRange(period, 0, ref)
+}
+
+// calendarRange returns [from, to) for a calendar unit shifted back by offset
+// units from the one containing ref. Weeks start Monday.
+func calendarRange(unit string, offset int, ref time.Time) (from, to time.Time) {
 	y, m, d := ref.Date()
 	loc := ref.Location()
 	midnight := time.Date(y, m, d, 0, 0, 0, 0, loc)
-	switch period {
+	switch unit {
 	case "day":
-		from, to = midnight, midnight.AddDate(0, 0, 1)
+		from = midnight.AddDate(0, 0, offset)
+		to = from.AddDate(0, 0, 1)
 	case "week":
-		offset := (int(ref.Weekday()) + 6) % 7 // Mon=0 ... Sun=6
-		from = midnight.AddDate(0, 0, -offset)
+		woff := (int(ref.Weekday()) + 6) % 7 // Mon=0 ... Sun=6
+		from = midnight.AddDate(0, 0, -woff+7*offset)
 		to = from.AddDate(0, 0, 7)
 	case "month":
-		from = time.Date(y, m, 1, 0, 0, 0, 0, loc)
+		from = time.Date(y, m, 1, 0, 0, 0, 0, loc).AddDate(0, offset, 0)
 		to = from.AddDate(0, 1, 0)
 	case "quarter":
 		qm := time.Month((int(m)-1)/3*3 + 1)
-		from = time.Date(y, qm, 1, 0, 0, 0, 0, loc)
+		from = time.Date(y, qm, 1, 0, 0, 0, 0, loc).AddDate(0, 3*offset, 0)
 		to = from.AddDate(0, 3, 0)
 	case "year":
-		from = time.Date(y, 1, 1, 0, 0, 0, 0, loc)
+		from = time.Date(y, 1, 1, 0, 0, 0, 0, loc).AddDate(offset, 0, 0)
 		to = from.AddDate(1, 0, 0)
 	}
 	return
@@ -59,8 +102,16 @@ func periodFilename(period string, t time.Time) (year, name string) {
 	}
 }
 
-// resolveRange picks the date window + output filename. --from/--to (YYYY-MM-DD,
-// both required together, --to inclusive) override the period's default range.
+// rangeName formats an arbitrary [from, to) window as "start_end" using the
+// inclusive last day (to is exclusive), e.g. "2026-06-01_2026-06-30".
+func rangeName(from, to time.Time) string {
+	last := to.AddDate(0, 0, -1)
+	return from.Format("2006-01-02") + "_" + last.Format("2006-01-02")
+}
+
+// resolveRange picks the date window + output filename from (in priority order):
+// an explicit --from/--to window, a calendar preset, or a rolling window. The
+// filename always reflects the *actual* resolved range, never the raw token.
 func resolveRange(period, fromStr, toStr string, ref time.Time) (from, to time.Time, year, name string, err error) {
 	if (fromStr == "") != (toStr == "") {
 		err = fmt.Errorf("--from and --to must be used together")
@@ -82,10 +133,20 @@ func resolveRange(period, fromStr, toStr string, ref time.Time) (from, to time.T
 			err = fmt.Errorf("--to must not be before --from")
 			return
 		}
-	} else {
-		from, to = defaultRange(period, ref)
+		return from, to, from.Format("2006"), rangeName(from, to), nil
 	}
-	year, name = periodFilename(period, from)
+	if p, ok := presets[period]; ok {
+		from, to = calendarRange(p.unit, p.offset, ref)
+		year, name = periodFilename(p.unit, from)
+		return
+	}
+	if days, ok := rollingDays[period]; ok {
+		y, m, d := ref.Date()
+		to = time.Date(y, m, d, 0, 0, 0, 0, ref.Location()) // today 00:00, exclusive
+		from = to.AddDate(0, 0, -days)
+		return from, to, from.Format("2006"), rangeName(from, to), nil
+	}
+	err = fmt.Errorf("invalid --period %q", period)
 	return
 }
 

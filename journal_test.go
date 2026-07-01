@@ -72,6 +72,36 @@ func TestResolveRangeCustom(t *testing.T) {
 	}
 }
 
+func TestResolveRangePresets(t *testing.T) {
+	loc := time.UTC
+	ref := time.Date(2026, 6, 30, 15, 0, 0, 0, loc) // Tue 2026-06-30
+
+	cases := []struct{ period, name, from, to string }{
+		{"yesterday", "2026-06-29", "2026-06-29", "2026-06-30"},
+		{"last-week", "2026-W26", "2026-06-22", "2026-06-29"},
+		{"last-month", "2026-05", "2026-05-01", "2026-06-01"},
+		{"last-7-days", "2026-06-23_2026-06-29", "2026-06-23", "2026-06-30"},
+		{"last-30-days", "2026-05-31_2026-06-29", "2026-05-31", "2026-06-30"},
+	}
+	for _, c := range cases {
+		from, to, _, name, err := resolveRange(c.period, "", "", ref)
+		if err != nil {
+			t.Fatalf("%s: %v", c.period, err)
+		}
+		if from.Format("2006-01-02") != c.from || to.Format("2006-01-02") != c.to {
+			t.Errorf("%s range = %s..%s, want %s..%s", c.period,
+				from.Format("2006-01-02"), to.Format("2006-01-02"), c.from, c.to)
+		}
+		if name != c.name {
+			t.Errorf("%s filename = %q, want %q", c.period, name, c.name)
+		}
+	}
+
+	if _, _, _, _, err := resolveRange("nonsense", "", "", ref); err == nil {
+		t.Error("expected error for unknown period token")
+	}
+}
+
 func TestGroupByDay(t *testing.T) {
 	mk := func(day, hh int) Commit {
 		return Commit{When: time.Date(2026, 6, day, hh, 0, 0, 0, time.UTC), Repo: Repo{Name: "r"}}

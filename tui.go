@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/huh"
 )
@@ -282,10 +283,11 @@ func gitGlobalEmail() string {
 }
 
 // interactiveGenerate asks the few things a journal needs when git-recap is run
-// bare on a terminal: which period, and which profile (only when there's more
-// than one). Repo fine-tuning stays on the explicit --pick flag. Chosen values
-// are written back through the flag pointers.
-func interactiveGenerate(cfg *Config, profile, period *string) error {
+// bare on a terminal: which profile (only when there's more than one), which
+// period preset, and — if "Custom range…" is chosen — an explicit from/to.
+// Repo fine-tuning stays on the explicit --pick flag. Chosen values are written
+// back through the flag pointers.
+func interactiveGenerate(cfg *Config, profile, period, from, to *string) error {
 	names := profileNames(cfg)
 	if len(names) == 0 {
 		return fmt.Errorf("no profiles yet — run `git-recap config` to set one up")
@@ -296,23 +298,79 @@ func interactiveGenerate(cfg *Config, profile, period *string) error {
 		sel = names[0]
 	}
 	per := "month"
+	var fromStr, toStr string
 
-	fields := []huh.Field{}
+	g1 := []huh.Field{}
 	if len(names) > 1 {
-		fields = append(fields, huh.NewSelect[string]().
+		g1 = append(g1, huh.NewSelect[string]().
 			Title("Which profile?").
 			Options(huh.NewOptions(names...)...).
 			Value(&sel))
 	}
-	fields = append(fields, huh.NewSelect[string]().
+	g1 = append(g1, huh.NewSelect[string]().
 		Title("Which period?").
 		Description("How far back to recap.").
-		Options(huh.NewOptions("day", "week", "month", "quarter", "year")...).
+		Options(
+			huh.NewOption("Today", "today"),
+			huh.NewOption("Yesterday", "yesterday"),
+			huh.NewOption("This week", "week"),
+			huh.NewOption("Last week", "last-week"),
+			huh.NewOption("This month", "month"),
+			huh.NewOption("Last month", "last-month"),
+			huh.NewOption("This quarter", "quarter"),
+			huh.NewOption("This year", "year"),
+			huh.NewOption("Last 7 days", "last-7-days"),
+			huh.NewOption("Last 30 days", "last-30-days"),
+			huh.NewOption("Custom range…", "custom"),
+		).
 		Value(&per))
 
-	if err := huh.NewForm(huh.NewGroup(fields...)).Run(); err != nil {
+	isCustom := func() bool { return per != "custom" } // group hide-when-true
+
+	fromIn := huh.NewInput().
+		Title("From (YYYY-MM-DD)").
+		Placeholder("2026-01-31").
+		Value(&fromStr).
+		Validate(validDate)
+	toIn := huh.NewInput().
+		Title("To (YYYY-MM-DD, inclusive)").
+		Placeholder("2026-02-28").
+		Value(&toStr).
+		Validate(func(s string) error {
+			if err := validDate(s); err != nil {
+				return err
+			}
+			f, _ := time.Parse("2006-01-02", fromStr)
+			t, _ := time.Parse("2006-01-02", s)
+			if t.Before(f) {
+				return fmt.Errorf("must be on or after From")
+			}
+			return nil
+		})
+
+	if err := huh.NewForm(
+		huh.NewGroup(g1...),
+		huh.NewGroup(fromIn, toIn).WithHideFunc(isCustom),
+	).Run(); err != nil {
 		return err
 	}
-	*profile, *period = sel, per
+
+	*profile = sel
+	if per == "custom" {
+		*from, *to = fromStr, toStr // resolveRange picks up the custom window
+	} else {
+		*period = per
+	}
+	return nil
+}
+
+// validDate rejects blank or non-YYYY-MM-DD input for the custom-range fields.
+func validDate(s string) error {
+	if strings.TrimSpace(s) == "" {
+		return fmt.Errorf("required")
+	}
+	if _, err := time.Parse("2006-01-02", s); err != nil {
+		return fmt.Errorf("use YYYY-MM-DD")
+	}
 	return nil
 }

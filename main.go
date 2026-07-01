@@ -20,7 +20,12 @@ Generate flags:
   --profile NAME         profile to use (default: config's default_profile)
   --org A,B              only these orgs (overrides profile selection)
   --repo X,Y             only these repo names (overrides profile selection)
-  --period PERIOD        day|week|month|quarter|year (default: month)
+  --period PERIOD        a period preset (default: month). One of:
+                           day/today, yesterday,
+                           week/this-week, last-week,
+                           month/this-month, last-month,
+                           quarter, year,
+                           last-7-days, last-30-days
   --from YYYY-MM-DD       custom range start (use with --to)
   --to YYYY-MM-DD         custom range end, inclusive (use with --from)
   --pick                 interactively fuzzy-pick repos for this run
@@ -78,14 +83,16 @@ func runGenerate(argv []string) error {
 	// (pipe/cron/agent), keeps the non-interactive path below.
 	interactive := fs.NFlag() == 0 && isInteractive()
 	if interactive {
-		if err := interactiveGenerate(cfg, profileFlag, period); err != nil {
+		if err := interactiveGenerate(cfg, profileFlag, period, fromFlag, toFlag); err != nil {
 			return err
 		}
 		fmt.Fprintln(os.Stderr, "Scanning your workspace for repos…")
 	}
 
-	if !validPeriods[*period] {
-		return fmt.Errorf("invalid --period %q (day|week|month|quarter|year)", *period)
+	// --from/--to (a custom window) take priority over --period, so only
+	// validate the period token when no explicit range is given.
+	if *fromFlag == "" && !validPeriod(*period) {
+		return fmt.Errorf("invalid --period %q (day|week|month|quarter|year, today, yesterday, this-week, last-week, this-month, last-month, last-7-days, last-30-days)", *period)
 	}
 
 	discovered := discoverRepos(cfg.WorkspaceRoots)
