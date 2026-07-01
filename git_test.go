@@ -75,7 +75,7 @@ func TestScanCommits(t *testing.T) {
 	r.git("checkout", "-q", "main")
 	r.commit("duplicated work", "me@test.dev", "2026-06-20T11:00:00", "2026-06-25T11:00:00")
 
-	got, err := scanCommits(Repo{Path: r.path, Name: "fixture"}, from, to, []string{"me@test.dev"})
+	got, err := scanCommits(Repo{Path: r.path, Name: "fixture"}, from, to, []string{"me@test.dev"}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,12 +103,62 @@ func TestScanCommitsEmptyEmailsMatchesAll(t *testing.T) {
 	r.commit("anyone", "whoever@test.dev", "2026-06-10T10:00:00", "2026-06-10T10:00:00")
 	from := time.Date(2026, 6, 1, 0, 0, 0, 0, time.Local)
 	to := time.Date(2026, 7, 1, 0, 0, 0, 0, time.Local)
-	got, err := scanCommits(Repo{Path: r.path, Name: "fixture"}, from, to, nil)
+	got, err := scanCommits(Repo{Path: r.path, Name: "fixture"}, from, to, nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(got) != 1 || got[0].Subject != "anyone" {
 		t.Fatalf("got %v, want the one commit by any author", got)
+	}
+}
+
+func TestScanCommitsDiffstat(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	r := newFixtureRepo(t)
+	if err := os.WriteFile(filepath.Join(r.path, "a.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r.git("add", "a.txt")
+	cmd := exec.Command("git", "-C", r.path, "commit", "-q", "-m", "add lines")
+	cmd.Env = append(os.Environ(),
+		"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null",
+		"GIT_AUTHOR_DATE=2026-06-10T10:00:00", "GIT_COMMITTER_DATE=2026-06-10T10:00:00",
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("commit: %v\n%s", err, out)
+	}
+
+	from := time.Date(2026, 6, 1, 0, 0, 0, 0, time.Local)
+	to := time.Date(2026, 7, 1, 0, 0, 0, 0, time.Local)
+	got, err := scanCommits(Repo{Path: r.path, Name: "fixture"}, from, to, nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d commits, want 1", len(got))
+	}
+	if got[0].Files != 1 || got[0].Adds != 2 || got[0].Dels != 0 {
+		t.Errorf("diffstat = %d files +%d −%d, want 1 files +2 −0", got[0].Files, got[0].Adds, got[0].Dels)
+	}
+}
+
+func TestParseShortstat(t *testing.T) {
+	cases := []struct {
+		in                string
+		files, adds, dels int
+	}{
+		{" 3 files changed, 10 insertions(+), 2 deletions(-)", 3, 10, 2},
+		{" 1 file changed, 1 insertion(+)", 1, 1, 0},
+		{" 2 files changed, 5 deletions(-)", 2, 0, 5},
+		{"", 0, 0, 0},
+	}
+	for _, c := range cases {
+		f, a, d := parseShortstat(c.in)
+		if f != c.files || a != c.adds || d != c.dels {
+			t.Errorf("parseShortstat(%q) = %d/%d/%d, want %d/%d/%d", c.in, f, a, d, c.files, c.adds, c.dels)
+		}
 	}
 }
 

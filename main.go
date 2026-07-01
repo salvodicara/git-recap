@@ -69,6 +69,8 @@ Flags:
   --org A,B              only these orgs (overrides profile selection)
   --repo X,Y             only these repo names (overrides profile selection)
   --pick                 interactively fuzzy-pick repos for this run
+  --fetch                git fetch each repo first (work pushed elsewhere shows up)
+  --diffstat             include files changed and +/− lines per commit
   --format F             stdout format: term (default on a terminal), md, json
   --write                also save the recap as markdown in your recaps folder
   --recaps-folder PATH   save there instead of the configured folder
@@ -117,6 +119,8 @@ func runGenerate(argv []string) error {
 		fromFlag    = fs.String("from", "", "range start YYYY-MM-DD")
 		toFlag      = fs.String("to", "", "range end YYYY-MM-DD (inclusive)")
 		pick        = fs.Bool("pick", false, "interactively pick repos")
+		fetch       = fs.Bool("fetch", false, "git fetch each repo before scanning")
+		diffstat    = fs.Bool("diffstat", false, "include files changed and +/− lines per commit")
 		write       = fs.Bool("write", false, "also save the recap to the recaps folder")
 		format      = fs.String("format", "", "stdout format: term|md|json")
 		folderFlag  = fs.String("recaps-folder", "", "recaps folder for this run (implies --write)")
@@ -276,15 +280,11 @@ func runGenerate(argv []string) error {
 		return err
 	}
 
-	var all []Commit
-	for _, r := range selected {
-		cs, err := scanCommits(r, from, to, emails)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "warning: scanning %s: %v\n", r.Slug(), err)
-			continue
-		}
-		all = append(all, cs...)
+	if *fetch {
+		fmt.Fprintf(os.Stderr, "Fetching %d repos…\n", len(selected))
+		fetchRepos(selected)
 	}
+	all := scanAll(selected, from, to, emails, *diffstat)
 
 	recap := Recap{Profile: profileName, Name: name, From: from, To: to, Commits: all}
 	out, err := render(outFormat, recap)

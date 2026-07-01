@@ -46,6 +46,14 @@ func shortHash(h string) string {
 	return h
 }
 
+// statSuffix renders " (+adds −dels)" for commits scanned with --diffstat.
+func statSuffix(c Commit) string {
+	if c.Files == 0 {
+		return ""
+	}
+	return fmt.Sprintf(" (+%d −%d)", c.Adds, c.Dels)
+}
+
 // byRepo groups one day's commits per repo slug, each repo's commits time-ordered.
 func byRepo(commits []Commit) map[string][]Commit {
 	m := map[string][]Commit{}
@@ -74,7 +82,7 @@ func renderMarkdown(r Recap) string {
 		for _, slug := range sortedKeys(repos) {
 			fmt.Fprintf(&b, "\n### %s\n\n", slug)
 			for _, c := range repos[slug] {
-				fmt.Fprintf(&b, "- `%s` %s — %s\n", shortHash(c.Hash), c.When.Format("15:04"), c.Subject)
+				fmt.Fprintf(&b, "- `%s` %s — %s%s\n", shortHash(c.Hash), c.When.Format("15:04"), c.Subject, statSuffix(c))
 			}
 		}
 	}
@@ -107,7 +115,7 @@ func renderTerm(r Recap) string {
 			fmt.Fprintf(&b, "  %s\n", styleRepo.Render(slug))
 			for _, c := range repos[slug] {
 				meta := styleMeta.Render(shortHash(c.Hash) + " " + c.When.Format("15:04"))
-				fmt.Fprintf(&b, "    %s  %s\n", meta, c.Subject)
+				fmt.Fprintf(&b, "    %s  %s%s\n", meta, c.Subject, styleMeta.Render(statSuffix(c)))
 			}
 		}
 	}
@@ -126,6 +134,9 @@ func renderJSON(r Recap) string {
 		Date    time.Time `json:"date"`
 		Subject string    `json:"subject"`
 		Repo    string    `json:"repo"`
+		Files   int       `json:"files_changed,omitempty"`
+		Adds    int       `json:"insertions,omitempty"`
+		Dels    int       `json:"deletions,omitempty"`
 	}
 	out := struct {
 		Profile string       `json:"profile"`
@@ -138,7 +149,7 @@ func renderJSON(r Recap) string {
 	cs := append([]Commit(nil), r.Commits...)
 	sort.Slice(cs, func(i, j int) bool { return cs[i].When.Before(cs[j].When) })
 	for _, c := range cs {
-		out.Commits = append(out.Commits, jsonCommit{c.Hash, c.When, c.Subject, c.Repo.Slug()})
+		out.Commits = append(out.Commits, jsonCommit{c.Hash, c.When, c.Subject, c.Repo.Slug(), c.Files, c.Adds, c.Dels})
 	}
 	b, _ := json.MarshalIndent(out, "", "  ")
 	return string(b) + "\n"

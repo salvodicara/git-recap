@@ -1,12 +1,16 @@
 package main
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -31,6 +35,9 @@ type Commit struct {
 	When    time.Time // author date, local
 	Subject string
 	Repo    Repo
+	Files   int // populated only when scanning with stats
+	Adds    int
+	Dels    int
 }
 
 // parseOrgRepo extracts owner and repo name from any git remote URL form:
@@ -116,11 +123,16 @@ func discoverRepos(roots []string) []Repo {
 //
 // Dedup: a rebased or cherry-picked commit reappears under a new hash on other
 // refs. Same author email + author date + subject = the same work; keep one.
-func scanCommits(repo Repo, from, to time.Time, emails []string) ([]Commit, error) {
+func scanCommits(repo Repo, from, to time.Time, emails []string, stats bool) ([]Commit, error) {
 	const sep = "\x1f"
+	// %x1e record separator lets each record carry the optional --shortstat
+	// line(s) that follow the header.
 	args := []string{
 		"-C", repo.Path, "log", "--no-merges", "--all",
-		"--pretty=format:%H" + sep + "%ae" + sep + "%aI" + sep + "%s",
+		"--pretty=format:%x1e%H" + sep + "%ae" + sep + "%aI" + sep + "%s",
+	}
+	if stats {
+		args = append(args, "--shortstat")
 	}
 	for _, e := range emails {
 		// Prefilter for speed only; exact matching happens on %ae below
@@ -139,8 +151,9 @@ func scanCommits(repo Repo, from, to time.Time, emails []string) ([]Commit, erro
 
 	var commits []Commit
 	seen := map[string]bool{}
-	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
-		f := strings.SplitN(line, sep, 4)
+	for record := range strings.SplitSeq(string(out), "\x1e") {
+		header, rest, _ := strings.Cut(record, "\n")
+		f := strings.SplitN(header, sep, 4)
 		if len(f) != 4 {
 			continue
 		}
@@ -161,9 +174,75 @@ func scanCommits(repo Repo, from, to time.Time, emails []string) ([]Commit, erro
 			continue // rebased/cherry-picked duplicate on another ref
 		}
 		seen[key] = true
-		commits = append(commits, Commit{Hash: hash, When: when, Subject: subject, Repo: repo})
+		c := Commit{Hash: hash, When: when, Subject: subject, Repo: repo}
+		if stats {
+			c.Files, c.Adds, c.Dels = parseShortstat(rest)
+		}
+		commits = append(commits, c)
 	}
 	return commits, nil
+}
+
+// shortstatRE matches git's --shortstat line; insertions/deletions are each
+// optional ("2 files changed, 10 deletions(-)").
+var shortstatRE = regexp.MustCompile(`(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?`)
+
+func parseShortstat(s string) (files, adds, dels int) {
+	m := shortstatRE.FindStringSubmatch(s)
+	if m == nil {
+		return
+	}
+	files, _ = strconv.Atoi(m[1])
+	adds, _ = strconv.Atoi(m[2])
+	dels, _ = strconv.Atoi(m[3])
+	return
+}
+
+// forEachRepo runs fn over repos concurrently, a handful in flight at a time
+// (each fn shells out to git; more parallelism than this just thrashes).
+func forEachRepo(repos []Repo, fn func(i int, r Repo)) {
+	sem := make(chan struct{}, 8)
+	var wg sync.WaitGroup
+	for i, r := range repos {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			fn(i, r)
+		}()
+	}
+	wg.Wait()
+}
+
+// scanAll scans every repo concurrently, preserving repo order. Per-repo
+// failures warn and are skipped — one broken clone shouldn't sink the recap.
+func scanAll(repos []Repo, from, to time.Time, emails []string, stats bool) []Commit {
+	results := make([][]Commit, len(repos))
+	forEachRepo(repos, func(i int, r Repo) {
+		cs, err := scanCommits(r, from, to, emails, stats)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: scanning %s: %v\n", r.Slug(), err)
+			return
+		}
+		results[i] = cs
+	})
+	var all []Commit
+	for _, cs := range results {
+		all = append(all, cs...)
+	}
+	return all
+}
+
+// fetchRepos updates each repo's default remote so remote-tracking refs are
+// current before a scan. Failures warn but never abort — offline just means
+// slightly stale.
+func fetchRepos(repos []Repo) {
+	forEachRepo(repos, func(_ int, r Repo) {
+		if err := exec.Command("git", "-C", r.Path, "fetch", "--quiet").Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: fetching %s: %v\n", r.Slug(), err)
+		}
+	})
 }
 
 // containsFold reports whether list contains s, case-insensitively.
