@@ -5,8 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
-	"strings"
 	"time"
 )
 
@@ -46,8 +44,24 @@ func validPeriod(p string) bool {
 	if _, ok := presets[p]; ok {
 		return true
 	}
-	_, ok := rollingDays[p]
-	return ok
+	if _, ok := rollingDays[p]; ok {
+		return true
+	}
+	return p == "standup"
+}
+
+// standupRange is [last working day 00:00, tomorrow 00:00): on Monday it
+// reaches back to Friday, so weekend work shows and nothing is missed since
+// the previous standup. Includes today's commits — they belong in the report.
+func standupRange(ref time.Time) (from, to time.Time) {
+	y, m, d := ref.Date()
+	midnight := time.Date(y, m, d, 0, 0, 0, 0, ref.Location())
+	to = midnight.AddDate(0, 0, 1)
+	from = midnight.AddDate(0, 0, -1)
+	for from.Weekday() == time.Saturday || from.Weekday() == time.Sunday {
+		from = from.AddDate(0, 0, -1)
+	}
+	return
 }
 
 // defaultRange returns [from, to) for the current period containing ref.
@@ -135,6 +149,10 @@ func resolveRange(period, fromStr, toStr string, ref time.Time) (from, to time.T
 		}
 		return from, to, from.Format("2006"), rangeName(from, to), nil
 	}
+	if period == "standup" {
+		from, to = standupRange(ref)
+		return from, to, from.Format("2006"), rangeName(from, to), nil
+	}
 	if p, ok := presets[period]; ok {
 		from, to = calendarRange(p.unit, p.offset, ref)
 		year, name = periodFilename(p.unit, from)
@@ -148,60 +166,6 @@ func resolveRange(period, fromStr, toStr string, ref time.Time) (from, to time.T
 	}
 	err = fmt.Errorf("invalid --period %q", period)
 	return
-}
-
-// groupByDay buckets commits by local calendar day (YYYY-MM-DD).
-func groupByDay(commits []Commit) map[string][]Commit {
-	byDay := map[string][]Commit{}
-	for _, c := range commits {
-		k := c.When.Format("2006-01-02")
-		byDay[k] = append(byDay[k], c)
-	}
-	return byDay
-}
-
-func sortedKeys(m map[string][]Commit) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
-}
-
-// renderMarkdown produces the journal: days ascending, repos grouped per day,
-// commits time-ordered.
-func renderMarkdown(heading string, commits []Commit) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "# %s\n", heading)
-	if len(commits) == 0 {
-		b.WriteString("\n_No commits in this period._\n")
-		return b.String()
-	}
-	byDay := groupByDay(commits)
-	for _, day := range sortedKeys(byDay) {
-		fmt.Fprintf(&b, "\n## %s\n", day)
-		byRepo := map[string][]Commit{}
-		for _, c := range byDay[day] {
-			byRepo[c.Repo.Slug()] = append(byRepo[c.Repo.Slug()], c)
-		}
-		for _, slug := range sortedKeys(byRepo) {
-			fmt.Fprintf(&b, "\n### %s\n\n", slug)
-			cs := byRepo[slug]
-			sort.Slice(cs, func(i, j int) bool { return cs[i].When.Before(cs[j].When) })
-			for _, c := range cs {
-				fmt.Fprintf(&b, "- `%s` %s — %s\n", shortHash(c.Hash), c.When.Format("15:04"), c.Subject)
-			}
-		}
-	}
-	return b.String()
-}
-
-func shortHash(h string) string {
-	if len(h) > 7 {
-		return h[:7]
-	}
-	return h
 }
 
 // writeJournal writes content to recapsFolder/<profile>/<year>/<name>.md and

@@ -333,7 +333,7 @@ func editProfile(repos []Repo, existing Profile) (Profile, error) {
 	}
 	emailsStr := strings.Join(existing.Emails, ", ")
 	if emailsStr == "" {
-		emailsStr = gitGlobalEmail()
+		emailsStr = gitEmail("")
 	}
 
 	var chosen []string
@@ -408,14 +408,21 @@ func sortedSet(m map[string]bool) []string {
 	return out
 }
 
-func gitGlobalEmail() string {
-	out, _ := exec.Command("git", "config", "--global", "user.email").Output()
+// gitEmail is the effective git author email at dir (repo-local config wins,
+// falling back to global), or "" if unset. Empty dir means the current one.
+func gitEmail(dir string) string {
+	args := []string{"config", "user.email"}
+	if dir != "" {
+		args = append([]string{"-C", dir}, args...)
+	}
+	out, _ := exec.Command("git", args...).Output()
 	return strings.TrimSpace(string(out))
 }
 
 // periodChoices is the shared preset menu — one source of truth for the
 // generate hub's Period select and its display labels.
 var periodChoices = []huh.Option[string]{
+	huh.NewOption("Standup (since last working day)", "standup"),
 	huh.NewOption("Today", "today"),
 	huh.NewOption("Yesterday", "yesterday"),
 	huh.NewOption("This week", "week"),

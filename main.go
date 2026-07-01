@@ -51,39 +51,32 @@ func versionString() string {
 	return "(devel)"
 }
 
-const usage = `git-recap — reconstruct a work journal from git history
+const usage = `git-recap — instant recap of your git work, and a journal that writes itself
 
 Usage:
-  git-recap [flags]      generate a journal (no flags on a terminal = interactive)
+  git-recap              standup recap: everything since your last working day
+  git-recap [flags]      recap any period (prints to stdout; --write also saves)
+  git-recap -i           interactive builder: pick profile/period, save a file
   git-recap config       view or change configuration
   git-recap version      print the version (also --version, -v)
 
-Generate flags:
+Flags:
+  --period PERIOD        standup (default), day/today, yesterday,
+                         week/this-week, last-week, month/this-month,
+                         last-month, quarter, year, last-7-days, last-30-days
+  --from / --to          custom range instead, YYYY-MM-DD (--to inclusive)
   --profile NAME         profile to use (default: config's default_profile)
   --org A,B              only these orgs (overrides profile selection)
   --repo X,Y             only these repo names (overrides profile selection)
-  --period PERIOD        a period preset (default: month). One of:
-                           day/today, yesterday,
-                           week/this-week, last-week,
-                           month/this-month, last-month,
-                           quarter, year,
-                           last-7-days, last-30-days
-  --from YYYY-MM-DD       custom range start (use with --to)
-  --to YYYY-MM-DD         custom range end, inclusive (use with --from)
   --pick                 interactively fuzzy-pick repos for this run
-  --recaps-folder PATH   write this run's recap here instead of your
-                           configured default (one-off, not saved)
+  --format F             stdout format: term (default on a terminal), md, json
+  --write                also save the recap as markdown in your recaps folder
+  --recaps-folder PATH   save there instead of the configured folder
+                         (implies --write; one-off, not saved)
 
-Configure — edit single fields from the CLI (git-recap config ...):
-  (no flags on a terminal opens an interactive editor for every setting)
-  --recaps-folder PATH   where recaps are written
-  --roots A,B            workspace roots to scan
-  --default-profile NAME profile used when none is given
-  --profile NAME         create/update a profile (with --orgs/--repos/--emails)
-  --delete-profile NAME  remove a profile
-
-Run bare on a terminal to pick profile and period interactively; piped or with
-any flag, git-recap runs non-interactively.`
+Zero config: without a config file, git-recap scans the current directory and
+counts commits by your git user.email. Run ` + "`git-recap config`" + ` to set up
+workspace roots, profiles, and a recaps folder worth keeping in git.`
 
 func main() {
 	if len(os.Args) > 1 {
@@ -120,31 +113,63 @@ func runGenerate(argv []string) error {
 		profileFlag = fs.String("profile", "", "profile name")
 		orgFlag     = fs.String("org", "", "comma-separated orgs")
 		repoFlag    = fs.String("repo", "", "comma-separated repo names")
-		period      = fs.String("period", "month", "day|week|month|quarter|year")
+		period      = fs.String("period", "standup", "period preset")
 		fromFlag    = fs.String("from", "", "range start YYYY-MM-DD")
 		toFlag      = fs.String("to", "", "range end YYYY-MM-DD (inclusive)")
 		pick        = fs.Bool("pick", false, "interactively pick repos")
-		folderFlag  = fs.String("recaps-folder", "", "write this run's recap here instead of the configured default")
+		write       = fs.Bool("write", false, "also save the recap to the recaps folder")
+		format      = fs.String("format", "", "stdout format: term|md|json")
+		folderFlag  = fs.String("recaps-folder", "", "recaps folder for this run (implies --write)")
 	)
+	var interactive bool
+	fs.BoolVar(&interactive, "i", false, "interactive recap builder")
+	fs.BoolVar(&interactive, "interactive", false, "interactive recap builder")
 	if err := fs.Parse(argv); err != nil {
 		return err
 	}
 	if fs.NArg() > 0 {
 		return fmt.Errorf("unexpected argument %q (see `git-recap help`)", fs.Arg(0))
 	}
+	if *folderFlag != "" {
+		*write = true
+	}
+
+	// Fail fast on a bad format, before any scanning.
+	outFormat := *format
+	if outFormat == "" {
+		outFormat = "md"
+		if isTTY(os.Stdout) {
+			outFormat = "term"
+		}
+	}
+	switch outFormat {
+	case "term", "md", "markdown", "json":
+	default:
+		return fmt.Errorf("invalid --format %q (term|md|json)", outFormat)
+	}
 
 	cfg, cfgPath, err := loadConfig()
-	if os.IsNotExist(err) {
-		return fmt.Errorf("no config at %s — run `git-recap config` first", cfgPath)
-	}
-	if err != nil {
+	zeroConfig := os.IsNotExist(err)
+	if err != nil && !zeroConfig {
 		return fmt.Errorf("reading %s: %w", cfgPath, err)
 	}
+	if zeroConfig {
+		// No config: recap the current directory with your git identity.
+		// Anything that needs profiles or a saved recaps folder needs config.
+		if interactive || *profileFlag != "" || (*write && *folderFlag == "") {
+			return fmt.Errorf("no config at %s — run `git-recap config` first", cfgPath)
+		}
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		cfg = &Config{WorkspaceRoots: []string{wd}}
+	}
 
-	// Bare run on a terminal → interactive selection. Any flag, or no TTY
-	// (pipe/cron/agent), keeps the non-interactive path below.
-	interactive := fs.NFlag() == 0 && isInteractive()
 	if interactive {
+		if !isInteractive() {
+			return fmt.Errorf("-i needs a terminal")
+		}
 		if err := interactiveGenerate(cfg, profileFlag, period, fromFlag, toFlag, folderFlag); err != nil {
 			if errors.Is(err, errCancelled) {
 				fmt.Println("Cancelled.")
@@ -152,18 +177,23 @@ func runGenerate(argv []string) error {
 			}
 			return err
 		}
+		*write = true // the builder exists to produce a journal file
 		fmt.Fprintln(os.Stderr, "Scanning your workspace for repos…")
 	}
 
 	// --from/--to (a custom window) take priority over --period, so only
 	// validate the period token when no explicit range is given.
 	if *fromFlag == "" && !validPeriod(*period) {
-		return fmt.Errorf("invalid --period %q (day|week|month|quarter|year, today, yesterday, this-week, last-week, this-month, last-month, last-7-days, last-30-days)", *period)
+		return fmt.Errorf("invalid --period %q (standup, day|today, yesterday, week|this-week, last-week, month|this-month, last-month, quarter, year, last-7-days, last-30-days)", *period)
 	}
 
 	discovered := discoverRepos(cfg.WorkspaceRoots)
 	if len(discovered) == 0 {
-		return fmt.Errorf("no git repos found under %s", strings.Join(cfg.WorkspaceRoots, ", "))
+		hint := ""
+		if zeroConfig {
+			hint = " (scanned the current directory; run `git-recap config` to set workspace roots)"
+		}
+		return fmt.Errorf("no git repos found under %s%s", strings.Join(cfg.WorkspaceRoots, ", "), hint)
 	}
 
 	orgs, repos := splitCSV(*orgFlag), splitCSV(*repoFlag)
@@ -173,7 +203,29 @@ func runGenerate(argv []string) error {
 		emails      []string
 	)
 
-	if *pick {
+	switch {
+	case zeroConfig:
+		profileName = "recap"
+		if e := gitEmail(cfg.WorkspaceRoots[0]); e != "" {
+			emails = []string{e}
+		} else {
+			fmt.Fprintln(os.Stderr, "warning: git user.email is unset — counting all authors")
+		}
+		if *pick {
+			if selected, err = pickRepos(discovered, nil); err != nil {
+				return err
+			}
+		} else if len(orgs) == 0 && len(repos) == 0 {
+			selected = discovered
+		} else {
+			sel := Profile{Orgs: orgs, Repos: repos}
+			for _, r := range discovered {
+				if sel.includes(r) {
+					selected = append(selected, r)
+				}
+			}
+		}
+	case *pick:
 		// Ad-hoc interactive selection; filed under the chosen/default profile.
 		profileName = *profileFlag
 		if profileName == "" {
@@ -196,7 +248,7 @@ func runGenerate(argv []string) error {
 		if selected, err = pickRepos(discovered, preChecked); err != nil {
 			return err
 		}
-	} else {
+	default:
 		// Non-interactive: a profile (named or default) scopes the repos;
 		// --org/--repo narrow it further when given.
 		prof, name, err := cfg.profile(*profileFlag)
@@ -234,16 +286,24 @@ func runGenerate(argv []string) error {
 		all = append(all, cs...)
 	}
 
-	heading := fmt.Sprintf("%s — %s", profileName, name)
-	recapsFolder := cfg.recapsFolder()
-	if *folderFlag != "" {
-		recapsFolder = *folderFlag
-	}
-	out, err := writeJournal(recapsFolder, profileName, year, name, renderMarkdown(heading, all))
+	recap := Recap{Profile: profileName, Name: name, From: from, To: to, Commits: all}
+	out, err := render(outFormat, recap)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Wrote %s — %d commits across %d repos.\n", out, len(all), len(selected))
+	fmt.Print(out)
+
+	if *write {
+		folder := cfg.recapsFolder()
+		if *folderFlag != "" {
+			folder = *folderFlag
+		}
+		path, err := writeJournal(folder, profileName, year, name, renderMarkdown(recap))
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "Wrote %s — %d commits across %d repos.\n", path, len(all), len(selected))
+	}
 	return nil
 }
 

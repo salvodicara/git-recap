@@ -102,6 +102,33 @@ func TestResolveRangePresets(t *testing.T) {
 	}
 }
 
+func TestStandupRange(t *testing.T) {
+	loc := time.UTC
+	cases := []struct{ ref, from, to string }{
+		{"2026-07-06", "2026-07-03", "2026-07-07"}, // Monday reaches back to Friday
+		{"2026-06-30", "2026-06-29", "2026-07-01"}, // Tuesday → since Monday
+		{"2026-07-04", "2026-07-03", "2026-07-05"}, // Saturday → since Friday
+		{"2026-07-05", "2026-07-03", "2026-07-06"}, // Sunday → since Friday
+	}
+	for _, c := range cases {
+		ref, _ := time.ParseInLocation("2006-01-02", c.ref, loc)
+		from, to, _, name, err := resolveRange("standup", "", "", ref.Add(10*time.Hour))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if from.Format("2006-01-02") != c.from || to.Format("2006-01-02") != c.to {
+			t.Errorf("standup@%s = %s..%s, want %s..%s", c.ref,
+				from.Format("2006-01-02"), to.Format("2006-01-02"), c.from, c.to)
+		}
+		if name == "" {
+			t.Errorf("standup@%s has empty name", c.ref)
+		}
+	}
+	if !validPeriod("standup") {
+		t.Error("standup should be a valid period")
+	}
+}
+
 func TestVersionStringLdflags(t *testing.T) {
 	old := version
 	defer func() { version = old }()
