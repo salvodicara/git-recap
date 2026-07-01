@@ -1,9 +1,12 @@
 name: CI
 
+# Doc-only changes don't burn CI minutes.
 on:
   push:
     branches: [main]
+    paths-ignore: ["**.md", "LICENSE"]
   pull_request:
+    paths-ignore: ["**.md", "LICENSE"]
 
 permissions:
   contents: read

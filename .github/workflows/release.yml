@@ -1,11 +1,9 @@
 name: Release
 
-# Backup path — you normally release locally with `just release X.Y.Z`.
-# Pushing a v* tag builds prebuilt binaries and attaches them to the release.
-# (The Homebrew tap is updated by `just release`, not here.)
+# Backup path — `just release X.Y.Z` builds and attaches binaries locally
+# (zero Actions minutes). Trigger this manually only if that step was skipped
+# (e.g. goreleaser not installed). The Homebrew tap is updated by `just release`.
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
 
 permissions:

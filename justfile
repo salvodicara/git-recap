@@ -55,6 +55,12 @@ release version:
     git tag "$v"
     git push origin "$v"
     gh release create "$v" --title "$v" --generate-notes
+    echo "==> building prebuilt binaries"
+    if command -v goreleaser >/dev/null; then
+        GITHUB_TOKEN="$(gh auth token)" goreleaser release --clean
+    else
+        echo "note: goreleaser not installed — binaries skipped; run the Release workflow on GitHub if you want them"
+    fi
     echo "==> bumping Homebrew formula"
     url="https://github.com/{{repo}}/archive/refs/tags/$v.tar.gz"
     sha="$(curl -fsSL "$url" | shasum -a 256 | awk '{print $1}')"
