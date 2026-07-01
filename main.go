@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -131,6 +132,10 @@ func runGenerate(argv []string) error {
 	interactive := fs.NFlag() == 0 && isInteractive()
 	if interactive {
 		if err := interactiveGenerate(cfg, profileFlag, period, fromFlag, toFlag); err != nil {
+			if errors.Is(err, errCancelled) {
+				fmt.Println("Cancelled.")
+				return nil
+			}
 			return err
 		}
 		fmt.Fprintln(os.Stderr, "Scanning your workspace for repos…")

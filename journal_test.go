@@ -111,6 +111,15 @@ func TestVersionStringLdflags(t *testing.T) {
 	}
 }
 
+func TestPeriodLabel(t *testing.T) {
+	if got := periodLabel("last-month"); got != "Last month" {
+		t.Errorf("periodLabel(last-month) = %q", got)
+	}
+	if got := periodLabel("bogus"); got != "bogus" {
+		t.Errorf("periodLabel(bogus) = %q, want passthrough", got)
+	}
+}
+
 func TestGroupByDay(t *testing.T) {
 	mk := func(day, hh int) Commit {
 		return Commit{When: time.Date(2026, 6, day, hh, 0, 0, 0, time.UTC), Repo: Repo{Name: "r"}}
