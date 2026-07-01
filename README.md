@@ -97,6 +97,8 @@ git-recap version      print the version (also --version, -v)
   --from YYYY-MM-DD      custom range start (use with --to)
   --to YYYY-MM-DD        custom range end, inclusive (use with --from)
   --pick                interactively fuzzy-pick repos for this run
+  --recaps-folder PATH   write this run's recap here instead of your
+                          configured default (one-off, not saved)
 ```
 
 - **Period** sets the date range and output filename. Calendar presets name the
@@ -112,10 +114,13 @@ git-recap version      print the version (also --version, -v)
 - **All branches.** Commits are collected across every branch (local and
   remote-tracking), filtered to your author email(s), so work you never merged or
   checked back out is still captured. Merge commits are excluded as noise.
-- **Run bare on a terminal** to pick the period — or a custom range — (and
-  profile, if you have more than one) interactively. Piped, in CI, or with any
-  flag, `git-recap` runs non-interactively using the default profile. Add
-  **`--pick`** to fuzzy-pick repos for a single run.
+- **Run bare on a terminal** to pick the profile, period, and recaps folder
+  interactively (a menu — pick a row, edit just it, back to the menu; the
+  recaps folder there defaults to your configured one but can be overridden
+  for that run only). Piped, in CI, or with any flag, `git-recap` runs
+  non-interactively using the default profile. Add **`--pick`** to fuzzy-pick
+  repos for a single run, or **`--recaps-folder`** to redirect just one run's
+  output.
 
 ## Profiles & config
 

@@ -439,11 +439,12 @@ func periodLabel(token string) string {
 }
 
 // interactiveGenerate is the hub shown when git-recap runs bare on a
-// terminal: pick a profile and a period (independently, in any order), then
-// Generate — or Cancel to back out without writing anything. Repo
-// fine-tuning stays on the explicit --pick flag. Chosen values are written
-// back through the flag pointers; a Cancel returns errCancelled.
-func interactiveGenerate(cfg *Config, profile, period, from, to *string) error {
+// terminal: pick a profile, a period, and (optionally) override the recaps
+// folder for just this run — independently, in any order — then Generate,
+// or Cancel to back out without writing anything. Repo fine-tuning stays on
+// the explicit --pick flag. Chosen values are written back through the flag
+// pointers; a Cancel returns errCancelled.
+func interactiveGenerate(cfg *Config, profile, period, from, to, folder *string) error {
 	names := profileNames(cfg)
 	if len(names) == 0 {
 		return fmt.Errorf("no profiles yet — run `git-recap config` to set one up")
@@ -455,6 +456,7 @@ func interactiveGenerate(cfg *Config, profile, period, from, to *string) error {
 	}
 	per := "month"
 	var fromStr, toStr string
+	folderOverride := *folder
 
 	periodValue := func() string {
 		if per == "custom" {
@@ -465,6 +467,12 @@ func interactiveGenerate(cfg *Config, profile, period, from, to *string) error {
 		}
 		return periodLabel(per)
 	}
+	folderValue := func() string {
+		if folderOverride != "" {
+			return folderOverride + "  (this run only)"
+		}
+		return cfg.recapsFolder()
+	}
 
 	for {
 		rows := []hubRow{}
@@ -473,6 +481,7 @@ func interactiveGenerate(cfg *Config, profile, period, from, to *string) error {
 		}
 		rows = append(rows,
 			hubRow{"period", "Period", periodValue},
+			hubRow{"folder", "Recaps folder", folderValue},
 			hubRow{"generate", "Generate", nil},
 			hubRow{"cancel", "Cancel", nil},
 		)
@@ -496,12 +505,16 @@ func interactiveGenerate(cfg *Config, profile, period, from, to *string) error {
 			if err := editPeriod(&per, &fromStr, &toStr); err != nil {
 				return err
 			}
+		case "folder":
+			if err := editRunRecapsFolder(&folderOverride, cfg.recapsFolder()); err != nil {
+				return err
+			}
 		case "generate":
 			if per == "custom" && (fromStr == "" || toStr == "") {
 				fmt.Println("Error: set a custom From/To before generating.")
 				continue
 			}
-			*profile = sel
+			*profile, *folder = sel, folderOverride
 			if per == "custom" {
 				*from, *to = fromStr, toStr // resolveRange picks up the custom window
 			} else {
@@ -512,6 +525,30 @@ func interactiveGenerate(cfg *Config, profile, period, from, to *string) error {
 			return errCancelled
 		}
 	}
+}
+
+// editRunRecapsFolder edits a per-run recaps-folder override. Prefilled with
+// the configured default; leaving it unchanged (or blanking it back to that
+// default) clears the override so the configured default is used.
+func editRunRecapsFolder(override *string, configured string) error {
+	val := *override
+	if val == "" {
+		val = configured
+	}
+	if err := newForm(huh.NewGroup(
+		huh.NewInput().
+			Title("Recaps folder for this run").
+			Description("Overrides just this run — your saved default is unchanged.").
+			Value(&val),
+	)).Run(); err != nil {
+		return err
+	}
+	val = strings.TrimSpace(val)
+	if val == configured {
+		val = "" // back to the configured default, no override
+	}
+	*override = val
+	return nil
 }
 
 // editPeriod runs the period select, revealing a validated custom From/To

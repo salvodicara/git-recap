@@ -71,6 +71,8 @@ Generate flags:
   --from YYYY-MM-DD       custom range start (use with --to)
   --to YYYY-MM-DD         custom range end, inclusive (use with --from)
   --pick                 interactively fuzzy-pick repos for this run
+  --recaps-folder PATH   write this run's recap here instead of your
+                           configured default (one-off, not saved)
 
 Configure — edit single fields from the CLI (git-recap config ...):
   (no flags on a terminal opens an interactive editor for every setting)
@@ -114,6 +116,7 @@ func runGenerate(argv []string) error {
 		fromFlag    = fs.String("from", "", "range start YYYY-MM-DD")
 		toFlag      = fs.String("to", "", "range end YYYY-MM-DD (inclusive)")
 		pick        = fs.Bool("pick", false, "interactively pick repos")
+		folderFlag  = fs.String("recaps-folder", "", "write this run's recap here instead of the configured default")
 	)
 	if err := fs.Parse(argv); err != nil {
 		return err
@@ -131,7 +134,7 @@ func runGenerate(argv []string) error {
 	// (pipe/cron/agent), keeps the non-interactive path below.
 	interactive := fs.NFlag() == 0 && isInteractive()
 	if interactive {
-		if err := interactiveGenerate(cfg, profileFlag, period, fromFlag, toFlag); err != nil {
+		if err := interactiveGenerate(cfg, profileFlag, period, fromFlag, toFlag, folderFlag); err != nil {
 			if errors.Is(err, errCancelled) {
 				fmt.Println("Cancelled.")
 				return nil
@@ -221,7 +224,11 @@ func runGenerate(argv []string) error {
 	}
 
 	heading := fmt.Sprintf("%s — %s", profileName, name)
-	out, err := writeJournal(cfg.recapsFolder(), profileName, year, name, renderMarkdown(heading, all))
+	recapsFolder := cfg.recapsFolder()
+	if *folderFlag != "" {
+		recapsFolder = *folderFlag
+	}
+	out, err := writeJournal(recapsFolder, profileName, year, name, renderMarkdown(heading, all))
 	if err != nil {
 		return err
 	}
