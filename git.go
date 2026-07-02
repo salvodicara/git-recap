@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -84,10 +85,12 @@ func discoverRepos(roots []string) []Repo {
 			if err != nil || !d.IsDir() {
 				return nil // skip unreadable entries / non-dirs
 			}
-			if name := d.Name(); path != root && (strings.HasPrefix(name, ".") || name == "node_modules") {
-				return fs.SkipDir // junk/hidden trees never hold *your* clones
-			}
 			if _, e := os.Stat(filepath.Join(path, ".git")); e != nil {
+				// Not a repo itself — don't descend into hidden/junk trees
+				// (a repo *named* .dotfiles is still found by the check above).
+				if name := d.Name(); path != root && (strings.HasPrefix(name, ".") || name == "node_modules") {
+					return fs.SkipDir
+				}
 				return nil
 			}
 			if !seen[path] {
@@ -120,23 +123,22 @@ func discoverRepos(roots []string) []Repo {
 // --since-as-filter (git ≥ 2.37) visits all commits; we pad it for clock skew
 // (author date is never meaningfully after commit date) and filter precisely
 // in Go. On older git we retry with no date limit at all — correct, just slower.
-//
-// Dedup: a rebased or cherry-picked commit reappears under a new hash on other
-// refs. Same author email + author date + subject = the same work; keep one.
 func scanCommits(repo Repo, from, to time.Time, emails []string, stats bool) ([]Commit, error) {
 	const sep = "\x1f"
 	// %x1e record separator lets each record carry the optional --shortstat
-	// line(s) that follow the header.
+	// line(s) that follow the header. grep.patternType=fixed makes --author a
+	// plain substring — emails with regex metachars (+, .) stay literal even
+	// if the user's gitconfig sets extended/perl patterns.
 	args := []string{
-		"-C", repo.Path, "log", "--no-merges", "--all",
+		"-C", repo.Path, "-c", "grep.patternType=fixed", "log", "--no-merges", "--all",
 		"--pretty=format:%x1e%H" + sep + "%ae" + sep + "%aI" + sep + "%s",
 	}
 	if stats {
 		args = append(args, "--shortstat")
 	}
 	for _, e := range emails {
-		// Prefilter for speed only; exact matching happens on %ae below
-		// (--author is an unanchored regex, so it can overmatch).
+		// Prefilter for speed only; precise matching happens on %ae below.
+		// Domain entries ("@acme.com") substring-match here too.
 		args = append(args, "--author="+e)
 	}
 	sinceFilter := "--since-as-filter=" + from.Add(-36*time.Hour).Format(time.RFC3339)
@@ -150,7 +152,6 @@ func scanCommits(repo Repo, from, to time.Time, emails []string, stats bool) ([]
 	}
 
 	var commits []Commit
-	seen := map[string]bool{}
 	for record := range strings.SplitSeq(string(out), "\x1e") {
 		header, rest, _ := strings.Cut(record, "\n")
 		f := strings.SplitN(header, sep, 4)
@@ -158,7 +159,7 @@ func scanCommits(repo Repo, from, to time.Time, emails []string, stats bool) ([]
 			continue
 		}
 		hash, email, date, subject := f[0], f[1], f[2], f[3]
-		if len(emails) > 0 && !containsFold(emails, email) {
+		if len(emails) > 0 && !emailMatch(emails, email) {
 			continue
 		}
 		when, err := time.Parse(time.RFC3339, date)
@@ -169,11 +170,6 @@ func scanCommits(repo Repo, from, to time.Time, emails []string, stats bool) ([]
 		if when.Before(from) || !when.Before(to) {
 			continue // precise author-date window, [from, to)
 		}
-		key := email + sep + date + sep + subject
-		if seen[key] {
-			continue // rebased/cherry-picked duplicate on another ref
-		}
-		seen[key] = true
 		c := Commit{Hash: hash, When: when, Subject: subject, Repo: repo}
 		if stats {
 			c.Files, c.Adds, c.Dels = parseShortstat(rest)
@@ -181,6 +177,19 @@ func scanCommits(repo Repo, from, to time.Time, emails []string, stats bool) ([]
 		commits = append(commits, c)
 	}
 	return commits, nil
+}
+
+// emailMatch reports whether a commit author email matches a profile entry:
+// exact (case-insensitive), or domain suffix when the entry starts with "@"
+// ("@acme.com" catches every alias at that company).
+func emailMatch(entries []string, email string) bool {
+	for _, e := range entries {
+		if strings.EqualFold(e, email) ||
+			(strings.HasPrefix(e, "@") && strings.HasSuffix(strings.ToLower(email), strings.ToLower(e))) {
+			return true
+		}
+	}
+	return false
 }
 
 // shortstatRE matches git's --shortstat line; insertions/deletions are each
@@ -204,53 +213,76 @@ func forEachRepo(repos []Repo, fn func(i int, r Repo)) {
 	sem := make(chan struct{}, 8)
 	var wg sync.WaitGroup
 	for i, r := range repos {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			fn(i, r)
-		}()
+		})
 	}
 	wg.Wait()
 }
 
 // scanAll scans every repo concurrently, preserving repo order. Per-repo
 // failures warn and are skipped — one broken clone shouldn't sink the recap.
+//
+// Dedup happens here, across refs AND clones: a rebased or cherry-picked
+// commit reappears under a new hash, and two clones of one repo would
+// double-count. Same repo slug + author second + subject = the same work.
+// ponytail: %aI is second-granular, so scripted same-subject commits in one
+// second fold too; per-commit `git patch-id` is the precise upgrade.
 func scanAll(repos []Repo, from, to time.Time, emails []string, stats bool) []Commit {
 	results := make([][]Commit, len(repos))
 	forEachRepo(repos, func(i int, r Repo) {
 		cs, err := scanCommits(r, from, to, emails, stats)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "warning: scanning %s: %v\n", r.Slug(), err)
+			fmt.Fprintf(os.Stderr, "warning: scanning %s: %s\n", r.Slug(), gitErr(err))
 			return
 		}
 		results[i] = cs
 	})
+	seen := map[string]bool{}
 	var all []Commit
 	for _, cs := range results {
-		all = append(all, cs...)
+		for _, c := range cs {
+			key := c.Repo.Slug() + "\x1f" + c.When.Format(time.RFC3339) + "\x1f" + c.Subject
+			if !seen[key] {
+				seen[key] = true
+				all = append(all, c)
+			}
+		}
 	}
 	return all
 }
 
+// gitErr prefers git's own stderr over Go's bare "exit status 128".
+func gitErr(err error) string {
+	var ee *exec.ExitError
+	if errors.As(err, &ee) && len(ee.Stderr) > 0 {
+		return strings.TrimSpace(string(ee.Stderr))
+	}
+	return err.Error()
+}
+
 // fetchRepos updates each repo's default remote so remote-tracking refs are
 // current before a scan. Failures warn but never abort — offline just means
-// slightly stale.
+// slightly stale. Credential prompts are disabled: a repo that needs auth
+// fails fast instead of wedging the whole run on a hidden prompt.
 func fetchRepos(repos []Repo) {
 	forEachRepo(repos, func(_ int, r Repo) {
-		if err := exec.Command("git", "-C", r.Path, "fetch", "--quiet").Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: fetching %s: %v\n", r.Slug(), err)
+		cmd := exec.Command("git", "-C", r.Path, "fetch", "--quiet")
+		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+		if err := cmd.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: fetching %s: %s\n", r.Slug(), gitErr(err))
 		}
 	})
 }
 
-// containsFold reports whether list contains s, case-insensitively.
-func containsFold(list []string, s string) bool {
-	for _, v := range list {
-		if strings.EqualFold(v, s) {
-			return true
-		}
+// repoToplevel returns the work-tree root containing dir, or "" when dir
+// isn't inside a git repo.
+func repoToplevel(dir string) string {
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return ""
 	}
-	return false
+	return strings.TrimSpace(string(out))
 }

@@ -85,12 +85,9 @@ func TestRenderTerm(t *testing.T) {
 }
 
 func TestRenderDispatch(t *testing.T) {
-	if _, err := render("bogus", testRecap()); err == nil {
-		t.Error("expected error for unknown format")
-	}
 	for _, f := range []string{"term", "md", "markdown", "json"} {
-		if _, err := render(f, testRecap()); err != nil {
-			t.Errorf("render(%q): %v", f, err)
+		if render(f, testRecap()) == "" {
+			t.Errorf("render(%q) produced no output", f)
 		}
 	}
 }

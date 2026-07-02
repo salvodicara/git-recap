@@ -3,8 +3,9 @@ package main
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os/exec"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -333,7 +334,7 @@ func editProfile(repos []Repo, existing Profile) (Profile, error) {
 	}
 	emailsStr := strings.Join(existing.Emails, ", ")
 	if emailsStr == "" {
-		emailsStr = gitEmail("")
+		emailsStr = gitGlobalEmail()
 	}
 
 	var chosen []string
@@ -396,26 +397,20 @@ func deriveScope(repos []Repo) (orgs, bareRepos []string) {
 			repoSet[r.Name] = true
 		}
 	}
-	return sortedSet(orgSet), sortedSet(repoSet)
-}
-
-func sortedSet(m map[string]bool) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
+	return slices.Sorted(maps.Keys(orgSet)), slices.Sorted(maps.Keys(repoSet))
 }
 
 // gitEmail is the effective git author email at dir (repo-local config wins,
-// falling back to global), or "" if unset. Empty dir means the current one.
+// falling back to global), or "" if unset.
 func gitEmail(dir string) string {
-	args := []string{"config", "user.email"}
-	if dir != "" {
-		args = append([]string{"-C", dir}, args...)
-	}
-	out, _ := exec.Command("git", args...).Output()
+	out, _ := exec.Command("git", "-C", dir, "config", "user.email").Output()
+	return strings.TrimSpace(string(out))
+}
+
+// gitGlobalEmail is the global author email — profile prefills use this so
+// they don't depend on which repo the config command happens to run in.
+func gitGlobalEmail() string {
+	out, _ := exec.Command("git", "config", "--global", "user.email").Output()
 	return strings.TrimSpace(string(out))
 }
 
@@ -461,7 +456,7 @@ func interactiveGenerate(cfg *Config, profile, period, from, to, folder *string)
 	if _, ok := cfg.Profiles[sel]; !ok {
 		sel = names[0]
 	}
-	per := "month"
+	per := *period // honour --period passed alongside -i
 	var fromStr, toStr string
 	folderOverride := *folder
 

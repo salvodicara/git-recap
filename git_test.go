@@ -75,10 +75,7 @@ func TestScanCommits(t *testing.T) {
 	r.git("checkout", "-q", "main")
 	r.commit("duplicated work", "me@test.dev", "2026-06-20T11:00:00", "2026-06-25T11:00:00")
 
-	got, err := scanCommits(Repo{Path: r.path, Name: "fixture"}, from, to, []string{"me@test.dev"}, false)
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := scanAll([]Repo{{Path: r.path, Name: "fixture"}}, from, to, []string{"me@test.dev"}, false)
 
 	want := map[string]bool{"in window": true, "late rebase": true, "duplicated work": true}
 	if len(got) != len(want) {
@@ -178,11 +175,52 @@ func TestDiscoverReposSkipsJunkDirs(t *testing.T) {
 		}
 	}
 	mkRepo("real")
+	mkRepo(".dotfiles")          // hidden-NAMED repo — still a repo, kept
 	mkRepo("node_modules/dep")   // inside junk dir — skipped
-	mkRepo(".cache/hidden-repo") // inside hidden dir — skipped
+	mkRepo(".cache/hidden-repo") // inside hidden non-repo dir — skipped
 
 	repos := discoverRepos([]string{root})
-	if len(repos) != 1 || repos[0].Name != "real" {
-		t.Fatalf("discovered %v, want just [real]", repos)
+	if len(repos) != 2 || repos[0].Name != ".dotfiles" || repos[1].Name != "real" {
+		t.Fatalf("discovered %v, want [.dotfiles real]", repos)
+	}
+}
+
+func TestEmailMatch(t *testing.T) {
+	cases := []struct {
+		entries []string
+		email   string
+		want    bool
+	}{
+		{[]string{"me@co.com"}, "me@co.com", true},
+		{[]string{"ME@CO.COM"}, "me@co.com", true},    // case-insensitive
+		{[]string{"me@co.co"}, "me@co.com", false},    // no substring overmatch
+		{[]string{"@acme.com"}, "dev@acme.com", true}, // domain entry
+		{[]string{"@acme.com"}, "dev@notacme.org", false},
+		{[]string{"foo+tag@x.dev"}, "foo+tag@x.dev", true}, // regex metachars are literal
+	}
+	for _, c := range cases {
+		if got := emailMatch(c.entries, c.email); got != c.want {
+			t.Errorf("emailMatch(%v, %q) = %v, want %v", c.entries, c.email, got, c.want)
+		}
+	}
+}
+
+func TestScanAllDedupsAcrossClones(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	// Two clones of "the same" repo (same slug) containing the same commit
+	// must not double-count it.
+	a := newFixtureRepo(t)
+	a.commit("same work", "me@test.dev", "2026-06-10T10:00:00", "2026-06-10T10:00:00")
+	b := newFixtureRepo(t)
+	b.commit("same work", "me@test.dev", "2026-06-10T10:00:00", "2026-06-10T10:00:00")
+
+	from := time.Date(2026, 6, 1, 0, 0, 0, 0, time.Local)
+	to := time.Date(2026, 7, 1, 0, 0, 0, 0, time.Local)
+	repos := []Repo{{Path: a.path, Org: "acme", Name: "proj"}, {Path: b.path, Org: "acme", Name: "proj"}}
+	got := scanAll(repos, from, to, nil, false)
+	if len(got) != 1 {
+		t.Fatalf("got %d commits across clones, want 1", len(got))
 	}
 }

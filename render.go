@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -28,15 +30,6 @@ func groupByDay(commits []Commit) map[string][]Commit {
 		byDay[k] = append(byDay[k], c)
 	}
 	return byDay
-}
-
-func sortedKeys(m map[string][]Commit) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }
 
 func shortHash(h string) string {
@@ -76,10 +69,10 @@ func renderMarkdown(r Recap) string {
 		return b.String()
 	}
 	byDay := groupByDay(r.Commits)
-	for _, day := range sortedKeys(byDay) {
+	for _, day := range slices.Sorted(maps.Keys(byDay)) {
 		fmt.Fprintf(&b, "\n## %s\n", day)
 		repos := byRepo(byDay[day])
-		for _, slug := range sortedKeys(repos) {
+		for _, slug := range slices.Sorted(maps.Keys(repos)) {
 			fmt.Fprintf(&b, "\n### %s\n\n", slug)
 			for _, c := range repos[slug] {
 				fmt.Fprintf(&b, "- `%s` %s — %s%s\n", shortHash(c.Hash), c.When.Format("15:04"), c.Subject, statSuffix(c))
@@ -107,11 +100,11 @@ func renderTerm(r Recap) string {
 		return b.String()
 	}
 	byDay := groupByDay(r.Commits)
-	for _, day := range sortedKeys(byDay) {
+	for _, day := range slices.Sorted(maps.Keys(byDay)) {
 		t, _ := time.Parse("2006-01-02", day)
 		fmt.Fprintf(&b, "\n%s\n", styleDay.Render(day+" · "+t.Format("Monday")))
 		repos := byRepo(byDay[day])
-		for _, slug := range sortedKeys(repos) {
+		for _, slug := range slices.Sorted(maps.Keys(repos)) {
 			fmt.Fprintf(&b, "  %s\n", styleRepo.Render(slug))
 			for _, c := range repos[slug] {
 				meta := styleMeta.Render(shortHash(c.Hash) + " " + c.When.Format("15:04"))
@@ -155,16 +148,15 @@ func renderJSON(r Recap) string {
 	return string(b) + "\n"
 }
 
-// render dispatches on format: "term", "md", or "json".
-func render(format string, r Recap) (string, error) {
+// render dispatches on format; main validates the token, so anything not
+// term/json is markdown.
+func render(format string, r Recap) string {
 	switch format {
 	case "term":
-		return renderTerm(r), nil
-	case "md", "markdown":
-		return renderMarkdown(r), nil
+		return renderTerm(r)
 	case "json":
-		return renderJSON(r), nil
+		return renderJSON(r)
 	default:
-		return "", fmt.Errorf("invalid --format %q (term|md|json)", format)
+		return renderMarkdown(r)
 	}
 }

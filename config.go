@@ -3,9 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -274,10 +275,5 @@ func runConfig(argv []string) error {
 
 // profileNames returns the configured profile names, sorted.
 func profileNames(cfg *Config) []string {
-	out := make([]string, 0, len(cfg.Profiles))
-	for n := range cfg.Profiles {
-		out = append(out, n)
-	}
-	sort.Strings(out)
-	return out
+	return slices.Sorted(maps.Keys(cfg.Profiles))
 }

@@ -167,6 +167,10 @@ func runGenerate(argv []string) error {
 		if err != nil {
 			return err
 		}
+		// From inside a repo's subdirectory, recap the whole repo — like git.
+		if top := repoToplevel(wd); top != "" {
+			wd = top
+		}
 		cfg = &Config{WorkspaceRoots: []string{wd}}
 	}
 
@@ -287,11 +291,7 @@ func runGenerate(argv []string) error {
 	all := scanAll(selected, from, to, emails, *diffstat)
 
 	recap := Recap{Profile: profileName, Name: name, From: from, To: to, Commits: all}
-	out, err := render(outFormat, recap)
-	if err != nil {
-		return err
-	}
-	fmt.Print(out)
+	fmt.Print(render(outFormat, recap))
 
 	if *write {
 		folder := cfg.recapsFolder()

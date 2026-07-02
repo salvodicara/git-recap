@@ -156,7 +156,9 @@ git-recap version      print the version (also --version, -v)
 ## Profiles & config
 
 A **profile** bundles which repos to include — by GitHub-style org and/or repo
-name — and whose commits to count, by author email. Orgs are derived from each
+name — and whose commits to count, by author email. Emails match exactly
+(case-insensitive), or a whole domain when the entry starts with `@`
+(`@acme.com` catches every alias at that company). Orgs are derived from each
 repo's `origin` remote (host-agnostic: GitHub, GitLab, self-hosted all work).
 
 `git-recap config` is the single command for everything in
