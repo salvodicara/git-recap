@@ -9,3 +9,4 @@ config.toml
 
 # Go
 *.test
+.DS_Store
