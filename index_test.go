@@ -48,7 +48,8 @@ func TestRunIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A week file overlapping the month — the year heatmap must not double-count.
-	wk := renderMarkdown(Recap{Profile: "work", Name: "2026-W27", Commits: commits})
+	// Written with frontmatter: index must still recognize it as a journal.
+	wk := renderMarkdown(Recap{Profile: "work", Name: "2026-W27", Commits: commits, Frontmatter: true})
 	if err := os.WriteFile(filepath.Join(dir, "2026-W27.md"), []byte(wk), 0o644); err != nil {
 		t.Fatal(err)
 	}

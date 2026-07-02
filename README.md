@@ -133,6 +133,8 @@ Flags:
   --write                also save the recap as markdown in your recaps folder
   --recaps-folder PATH   save there instead of the configured folder
                          (implies --write; one-off, not saved)
+  --frontmatter          add YAML frontmatter to markdown output, so the
+                         recaps folder drops into Obsidian as a vault
 
 Zero config: without a config file, git-recap scans the current directory and
 counts commits by your git user.email. Run `git-recap config` to set up
@@ -212,6 +214,16 @@ git add . && git commit -m "recaps: June 2026"
 Since every file is reconstructible from git history, there's no pressure to
 save eagerly — regenerate any period whenever you need it.
 
+### Obsidian
+
+Add `--frontmatter` and every journal gets YAML frontmatter (title, profile,
+period, dates, commit count) — point Obsidian at the recaps folder and it's a
+vault of dated notes, ready for dataview queries and graph view:
+
+```sh
+git recap --period week --write --frontmatter
+```
+
 ### Your recaps as a website
 
 `git recap index` turns the whole folder into a static site: an `index.html`
@@ -220,14 +232,27 @@ with per-year contribution heatmaps and totals for each profile, plus an
 it works even for periods whose repos are long gone. Push the folder to GitHub
 Pages (or any static host) and your work journal is a website.
 
-## Scripts, agents, standup bots
+## Never write a standup again
+
+The recap is the evidence; your LLM CLI turns it into the prose. No API keys
+in git-recap, no lock-in — pipe to whatever you use:
+
+```sh
+# This morning's standup update, written for you
+git recap --format md | claude -p "Write my standup update from these commits, 3 bullets max"
+
+# The performance-review brag doc, from a whole year of work
+git recap --period year --diffstat --format md | claude -p "Group this year's work into themes with impact statements"
+
+# Friday: summarize the week and save the journal
+git recap --period week --write --format md | claude -p "Write a short weekly update for my team lead"
+```
+
+## Scripts, agents, dashboards
 
 JSON output makes recaps composable:
 
 ```sh
-# Standup summary written by your LLM CLI of choice
-git recap --format md | claude -p "Write my standup update from these commits"
-
 # Commits this quarter, by repo
 git recap --period quarter --format json | jq '.commits | group_by(.repo) | map({repo: .[0].repo, n: length})'
 

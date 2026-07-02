@@ -77,6 +77,8 @@ Flags:
   --write                also save the recap as markdown in your recaps folder
   --recaps-folder PATH   save there instead of the configured folder
                          (implies --write; one-off, not saved)
+  --frontmatter          add YAML frontmatter to markdown output, so the
+                         recaps folder drops into Obsidian as a vault
 
 Zero config: without a config file, git-recap scans the current directory and
 counts commits by your git user.email. Run ` + "`git-recap config`" + ` to set up
@@ -130,6 +132,7 @@ func runGenerate(argv []string) error {
 		fetch       = fs.Bool("fetch", false, "git fetch each repo before scanning")
 		diffstat    = fs.Bool("diffstat", false, "include files changed and +/− lines per commit")
 		write       = fs.Bool("write", false, "also save the recap to the recaps folder")
+		frontmatter = fs.Bool("frontmatter", false, "add YAML frontmatter to markdown output")
 		format      = fs.String("format", "", "stdout format: term|md|json|html")
 		folderFlag  = fs.String("recaps-folder", "", "recaps folder for this run (implies --write)")
 	)
@@ -298,7 +301,7 @@ func runGenerate(argv []string) error {
 	}
 	all := scanAll(selected, from, to, emails, *diffstat)
 
-	recap := Recap{Profile: profileName, Name: name, From: from, To: to, Commits: all}
+	recap := Recap{Profile: profileName, Name: name, From: from, To: to, Commits: all, Frontmatter: *frontmatter}
 	fmt.Print(render(outFormat, recap))
 
 	if *write {

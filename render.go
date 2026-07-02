@@ -15,11 +15,12 @@ import (
 // Recap is the one data model every renderer consumes. Features land here,
 // never inside a single renderer — if it isn't visible in JSON, it doesn't exist.
 type Recap struct {
-	Profile string
-	Name    string // resolved period label, doubles as the filename base
-	From    time.Time
-	To      time.Time // exclusive
-	Commits []Commit
+	Profile     string
+	Name        string // resolved period label, doubles as the filename base
+	From        time.Time
+	To          time.Time // exclusive
+	Commits     []Commit
+	Frontmatter bool // prepend YAML frontmatter to markdown (Obsidian-friendly)
 }
 
 // RecapStats are aggregates derived from the commits — computed, never stored.
@@ -119,6 +120,11 @@ func byRepo(commits []Commit) map[string][]Commit {
 // commits time-ordered. This is also what --write persists.
 func renderMarkdown(r Recap) string {
 	var b strings.Builder
+	if r.Frontmatter {
+		fmt.Fprintf(&b, "---\ntitle: %s — %s\nprofile: %s\nperiod: %s\nfrom: %s\nto: %s\ncommits: %d\n---\n\n",
+			r.Profile, r.Name, r.Profile, r.Name,
+			r.From.Format("2006-01-02"), r.To.AddDate(0, 0, -1).Format("2006-01-02"), len(r.Commits))
+	}
 	fmt.Fprintf(&b, "# %s — %s\n", r.Profile, r.Name)
 	if len(r.Commits) == 0 {
 		b.WriteString("\n_No commits in this period._\n")

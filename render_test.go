@@ -46,6 +46,23 @@ func TestRenderMarkdown(t *testing.T) {
 	}
 }
 
+func TestRenderMarkdownFrontmatter(t *testing.T) {
+	r := testRecap()
+	r.Frontmatter = true
+	got := renderMarkdown(r)
+	if !strings.HasPrefix(got, "---\ntitle: work — 2026-06\n") {
+		t.Errorf("frontmatter missing or malformed:\n%s", got[:120])
+	}
+	for _, want := range []string{"profile: work", "period: 2026-06", "from: 2026-06-01", "to: 2026-06-30", "commits: 2", "\n---\n\n# work — 2026-06\n"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("frontmatter missing %q", want)
+		}
+	}
+	if renderMarkdown(testRecap())[0] == '-' {
+		t.Error("frontmatter rendered without the flag")
+	}
+}
+
 func TestRenderJSON(t *testing.T) {
 	var out struct {
 		Profile string    `json:"profile"`

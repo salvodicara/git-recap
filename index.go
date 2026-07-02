@@ -123,7 +123,7 @@ func runIndex(argv []string) error {
 		if err != nil {
 			return err
 		}
-		content := string(raw)
+		content := stripFrontmatter(string(raw))
 		// Only our own journals — never touch (or overwrite the .html twin
 		// of) other markdown the user keeps in the folder.
 		if !strings.HasPrefix(content, "# "+profile+" — "+period+"\n") {
@@ -274,6 +274,17 @@ func periodSpan(name string) (from, to time.Time) {
 		return from, last.AddDate(0, 0, 1)
 	}
 	return time.Time{}, time.Time{}
+}
+
+// stripFrontmatter drops a leading YAML frontmatter block (journals written
+// with --frontmatter) so the journal-heading check still recognizes the file.
+func stripFrontmatter(s string) string {
+	if rest, ok := strings.CutPrefix(s, "---\n"); ok {
+		if _, body, ok := strings.Cut(rest, "\n---\n"); ok {
+			return strings.TrimPrefix(body, "\n")
+		}
+	}
+	return s
 }
 
 // journalSpan is the [first day, last day+1) window covered by parsed commits.
