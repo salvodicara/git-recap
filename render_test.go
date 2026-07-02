@@ -72,6 +72,10 @@ func TestRenderJSON(t *testing.T) {
 	if out.Stats.Commits != 2 || out.Stats.ActiveDays != 1 {
 		t.Errorf("stats = %+v, want 2 commits / 1 active day", out.Stats)
 	}
+	// insertions/deletions must be present even when zero — scripts rely on it.
+	if !strings.Contains(renderJSON(testRecap()), `"insertions": 0`) {
+		t.Error("stats.insertions omitted when zero")
+	}
 	if out.Commits[0].Subject != "Add retry" || out.Commits[0].Repo != "acme/widgets" {
 		t.Errorf("commits not time-ordered or mis-slugged: %+v", out.Commits)
 	}
@@ -100,8 +104,8 @@ func TestRecapStats(t *testing.T) {
 	if s.Commits != 3 || s.Repos != 2 || s.ActiveDays != 2 {
 		t.Errorf("stats = %+v, want 3 commits, 2 repos, 2 active days", s)
 	}
-	if s.Busiest != "acme/widgets (2)" {
-		t.Errorf("busiest = %q, want acme/widgets (2)", s.Busiest)
+	if s.Busiest != "acme/widgets" || s.BusiestN != 2 {
+		t.Errorf("busiest = %q (%d), want acme/widgets (2)", s.Busiest, s.BusiestN)
 	}
 	if s.Adds != 10 || s.Dels != 2 {
 		t.Errorf("lines = +%d −%d, want +10 −2", s.Adds, s.Dels)

@@ -61,7 +61,7 @@ func TestRunIndex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"work", "2026 · 1 commits", `href="work/2026/2026-06.html"`, "2026-W27"} {
+	for _, want := range []string{"work", "2026 · 1 commit", `href="work/2026/2026-06.html"`, "2026-W27"} {
 		if !strings.Contains(string(idx), want) {
 			t.Errorf("index.html missing %q", want)
 		}
@@ -69,4 +69,96 @@ func TestRunIndex(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "2026-06.html")); err != nil {
 		t.Error("per-period page not written next to the journal")
 	}
+	// The regenerated month page must cover the whole month, not just the
+	// days that had commits: June 1 renders as an (empty) in-range cell.
+	page, err := os.ReadFile(filepath.Join(dir, "2026-06.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(page), `title="2026-06-01 · 0 commits"`) {
+		t.Error("period page heatmap doesn't span the full month window")
+	}
+}
+
+func TestRunIndexNeverTouchesForeignFiles(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "work", "2026")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A real journal so the run succeeds…
+	md := renderMarkdown(Recap{Profile: "work", Name: "2026-06", Commits: []Commit{
+		{Hash: "aaaaaaaaaaaa", When: time.Date(2026, 6, 29, 9, 0, 0, 0, time.Local), Subject: "x", Repo: Repo{Name: "r"}},
+	}})
+	if err := os.WriteFile(filepath.Join(dir, "2026-06.md"), []byte(md), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// …and the user's own notes with a hand-made .html twin.
+	if err := os.WriteFile(filepath.Join(dir, "notes.md"), []byte("# my private notes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "notes.html"), []byte("PRECIOUS"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := runIndex([]string{"--recaps-folder", root}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "notes.html"))
+	if err != nil || string(got) != "PRECIOUS" {
+		t.Errorf("notes.html was overwritten: %q, %v", got, err)
+	}
+	if idx, _ := os.ReadFile(filepath.Join(root, "index.html")); strings.Contains(string(idx), "notes") {
+		t.Error("foreign markdown leaked into the index")
+	}
+}
+
+func TestRunIndexCrossYearWeek(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "work", "2026")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// ISO week 2026-W01 files under 2026 but this commit is on 2025-12-30:
+	// it must count toward 2025, not 2026.
+	md := renderMarkdown(Recap{Profile: "work", Name: "2026-W01", Commits: []Commit{
+		{Hash: "aaaaaaaaaaaa", When: time.Date(2025, 12, 30, 9, 0, 0, 0, time.Local), Subject: "x", Repo: Repo{Name: "r"}},
+	}})
+	if err := os.WriteFile(filepath.Join(dir, "2026-W01.md"), []byte(md), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := runIndex([]string{"--recaps-folder", root}); err != nil {
+		t.Fatal(err)
+	}
+	idx, _ := os.ReadFile(filepath.Join(root, "index.html"))
+	if !strings.Contains(string(idx), "2025 · 1 commit") {
+		t.Error("cross-year week commit not attributed to its own calendar year")
+	}
+	if strings.Contains(string(idx), "2026 · 1 commit") {
+		t.Error("cross-year week commit double-counted into the folder year")
+	}
+}
+
+func TestPeriodSpan(t *testing.T) {
+	loc := time.Local
+	cases := []struct{ name, from, to string }{
+		{"2026-06-30", "2026-06-30", "2026-07-01"},
+		{"2026-06", "2026-06-01", "2026-07-01"},
+		{"2026", "2026-01-01", "2027-01-01"},
+		{"2026-Q2", "2026-04-01", "2026-07-01"},
+		{"2026-W01", "2025-12-29", "2026-01-05"}, // ISO week 1 spans years
+		{"2026-W27", "2026-06-29", "2026-07-06"},
+		{"2026-05-03_2026-05-19", "2026-05-03", "2026-05-20"},
+	}
+	for _, c := range cases {
+		from, to := periodSpan(c.name)
+		if from.Format("2006-01-02") != c.from || to.Format("2006-01-02") != c.to {
+			t.Errorf("periodSpan(%q) = %s..%s, want %s..%s", c.name,
+				from.Format("2006-01-02"), to.Format("2006-01-02"), c.from, c.to)
+		}
+	}
+	if from, _ := periodSpan("not-a-period"); !from.IsZero() {
+		t.Error("unrecognized name should return zero times")
+	}
+	_ = loc
 }

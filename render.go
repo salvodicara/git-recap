@@ -23,13 +23,16 @@ type Recap struct {
 }
 
 // RecapStats are aggregates derived from the commits — computed, never stored.
+// Insertions/deletions are always present (0 unless scanned with --diffstat)
+// so scripts never have to distinguish "absent" from "zero".
 type RecapStats struct {
 	Commits    int    `json:"commits"`
 	Repos      int    `json:"repos"`
 	ActiveDays int    `json:"active_days"`
-	Busiest    string `json:"busiest_repo,omitempty"` // "slug (N)"
-	Adds       int    `json:"insertions,omitempty"`   // only with --diffstat
-	Dels       int    `json:"deletions,omitempty"`
+	Busiest    string `json:"busiest_repo,omitempty"` // slug
+	BusiestN   int    `json:"busiest_repo_commits,omitempty"`
+	Adds       int    `json:"insertions"`
+	Dels       int    `json:"deletions"`
 }
 
 // Stats aggregates the recap's commits per repo and per day.
@@ -51,7 +54,7 @@ func (r Recap) Stats() RecapStats {
 		}
 	}
 	if bestN > 0 {
-		s.Busiest = fmt.Sprintf("%s (%d)", best, bestN)
+		s.Busiest, s.BusiestN = best, bestN
 	}
 	return s
 }
@@ -60,7 +63,7 @@ func (r Recap) Stats() RecapStats {
 func (s RecapStats) summary() string {
 	parts := []string{plural(s.Commits, "commit"), plural(s.Repos, "repo"), plural(s.ActiveDays, "active day")}
 	if s.Repos > 1 {
-		parts = append(parts, "busiest: "+s.Busiest)
+		parts = append(parts, fmt.Sprintf("busiest: %s (%d)", s.Busiest, s.BusiestN))
 	}
 	if s.Adds+s.Dels > 0 {
 		parts = append(parts, fmt.Sprintf("+%d −%d", s.Adds, s.Dels))
@@ -200,7 +203,7 @@ func renderJSON(r Recap) string {
 }
 
 // render dispatches on format; main validates the token, so anything not
-// term/json is markdown.
+// term/json/html is markdown.
 func render(format string, r Recap) string {
 	switch format {
 	case "term":

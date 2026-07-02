@@ -130,7 +130,7 @@ func runGenerate(argv []string) error {
 		fetch       = fs.Bool("fetch", false, "git fetch each repo before scanning")
 		diffstat    = fs.Bool("diffstat", false, "include files changed and +/− lines per commit")
 		write       = fs.Bool("write", false, "also save the recap to the recaps folder")
-		format      = fs.String("format", "", "stdout format: term|md|json")
+		format      = fs.String("format", "", "stdout format: term|md|json|html")
 		folderFlag  = fs.String("recaps-folder", "", "recaps folder for this run (implies --write)")
 	)
 	var interactive bool

@@ -49,17 +49,12 @@ func buildWeeks(from, to time.Time, counts map[string]int) [][]heatCell {
 	return weeks
 }
 
-// dayCounts buckets commit counts per YYYY-MM-DD.
-func dayCounts(commits []Commit) map[string]int {
+func renderHTML(r Recap) string {
 	counts := map[string]int{}
-	for _, c := range commits {
+	for _, c := range r.Commits {
 		counts[c.When.Format("2006-01-02")]++
 	}
-	return counts
-}
-
-func renderHTML(r Recap) string {
-	weeks := buildWeeks(r.From, r.To, dayCounts(r.Commits))
+	weeks := buildWeeks(r.From, r.To, counts)
 
 	type commitRow struct{ Hash, Time, Subject, Stat string }
 	type repoGroup struct {
@@ -106,7 +101,7 @@ func renderHTML(r Recap) string {
 
 // htmlTmpl holds the shared defines (style, heatmap) plus the two pages:
 // "recap" (one period) and "index" (the whole recaps folder).
-var htmlTmpl = template.Must(template.New("").Parse(`
+var htmlTmpl = template.Must(template.New("").Funcs(template.FuncMap{"plural": plural}).Parse(`
 {{define "head"}}<!doctype html>
 <html lang="en">
 <head>
@@ -174,7 +169,7 @@ li { padding: 2px 0; }
     <div class="wdays"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
     <div class="grid">
     {{- range .}}{{range .}}
-      <i class="{{if not .InRange}}out{{else if .Level}}l{{.Level}}{{end}}" title="{{.Date}} · {{.Count}} commits"></i>
+      <i class="{{if not .InRange}}out{{else if .Level}}l{{.Level}}{{end}}" title="{{.Date}} · {{plural .Count "commit"}}"></i>
     {{- end}}{{end}}
     </div>
   </div>
@@ -213,11 +208,11 @@ li { padding: 2px 0; }
 <h2>{{.Name}}</h2>
 {{- range .Years}}
 <div class="card">
-  <p class="summary">{{.Year}} · {{.Total}} commits</p>
+  <p class="summary">{{.Year}} · {{plural .Total "commit"}}</p>
   {{template "heatmap" .Weeks}}
   <table class="periods">
   {{- range .Periods}}
-    <tr><td><a href="{{.Href}}">{{.Name}}</a></td><td class="n">{{.Commits}} commits</td></tr>
+    <tr><td><a href="{{.Href}}">{{.Name}}</a></td><td class="n">{{plural .Commits "commit"}}</td></tr>
   {{- end}}
   </table>
 </div>
