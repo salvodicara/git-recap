@@ -137,7 +137,8 @@ Flags:
   --pick                 interactively fuzzy-pick repos for this run
   --fetch                git fetch each repo first (work pushed elsewhere shows up)
   --diffstat             include files changed and +/− lines per commit
-  --format F             stdout format: term (default on a terminal), md, json
+  --format F             stdout format: term (default on a terminal), md, json,
+                         or html (self-contained report with a heatmap)
   --write                also save the recap as markdown in your recaps folder
   --recaps-folder PATH   save there instead of the configured folder
                          (implies --write; one-off, not saved)
@@ -233,6 +234,9 @@ git recap --period quarter --format json | jq '.commits | group_by(.repo) | map(
 
 # Friday cron: save the week's journal
 git recap --period week --write
+
+# Your year as a shareable page: heatmap + full journal, one self-contained file
+git recap --period year --format html > 2026.html
 ```
 
 ## Development

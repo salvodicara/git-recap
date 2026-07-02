@@ -71,7 +71,8 @@ Flags:
   --pick                 interactively fuzzy-pick repos for this run
   --fetch                git fetch each repo first (work pushed elsewhere shows up)
   --diffstat             include files changed and +/− lines per commit
-  --format F             stdout format: term (default on a terminal), md, json
+  --format F             stdout format: term (default on a terminal), md, json,
+                         or html (self-contained report with a heatmap)
   --write                also save the recap as markdown in your recaps folder
   --recaps-folder PATH   save there instead of the configured folder
                          (implies --write; one-off, not saved)
@@ -147,9 +148,9 @@ func runGenerate(argv []string) error {
 		}
 	}
 	switch outFormat {
-	case "term", "md", "markdown", "json":
+	case "term", "md", "markdown", "json", "html":
 	default:
-		return fmt.Errorf("invalid --format %q (term|md|json)", outFormat)
+		return fmt.Errorf("invalid --format %q (term|md|json|html)", outFormat)
 	}
 
 	cfg, cfgPath, err := loadConfig()

@@ -207,6 +207,8 @@ func render(format string, r Recap) string {
 		return renderTerm(r)
 	case "json":
 		return renderJSON(r)
+	case "html":
+		return renderHTML(r)
 	default:
 		return renderMarkdown(r)
 	}

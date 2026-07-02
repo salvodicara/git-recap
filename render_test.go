@@ -111,8 +111,38 @@ func TestRecapStats(t *testing.T) {
 	}
 }
 
+func TestRenderHTML(t *testing.T) {
+	r := testRecap()
+	r.Commits[0].Subject = `Fix <script>alert("xss")</script> parser`
+	got := renderHTML(r)
+	for _, want := range []string{
+		"<!doctype html>",
+		"work — 2026-06",
+		`class="l4"`, // busiest day gets the top intensity level
+		"2026-06-30 · Tuesday",
+		"acme/widgets",
+		"Fix &lt;script&gt;", // subjects are escaped
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("html missing %q", want)
+		}
+	}
+	if strings.Contains(got, "<script>alert") {
+		t.Error("unescaped subject in HTML output")
+	}
+	if strings.Contains(got, "http") {
+		t.Error("html should be self-contained — no external URLs")
+	}
+
+	if empty := renderHTML(Recap{Profile: "work", Name: "2026-06",
+		From: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC),
+		To:   time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)}); !strings.Contains(empty, "No commits") {
+		t.Error("empty recap should say so")
+	}
+}
+
 func TestRenderDispatch(t *testing.T) {
-	for _, f := range []string{"term", "md", "markdown", "json"} {
+	for _, f := range []string{"term", "md", "markdown", "json", "html"} {
 		if render(f, testRecap()) == "" {
 			t.Errorf("render(%q) produced no output", f)
 		}
