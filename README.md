@@ -114,13 +114,19 @@ repos from anywhere), profiles, and a journal folder.
 
 ## Usage
 
-```
-git-recap              standup recap: everything since your last working day
-git-recap [flags]      recap any period (prints to stdout; --write also saves)
-git-recap -i           interactive builder: pick profile/period, save a file
-git-recap config       view or change configuration
-git-recap version      print the version (also --version, -v)
+This is `git-recap help`, verbatim (a test keeps it in sync):
 
+```
+git-recap — instant recap of your git work, and a journal that writes itself
+
+Usage:
+  git-recap              standup recap: everything since your last working day
+  git-recap [flags]      recap any period (prints to stdout; --write also saves)
+  git-recap -i           interactive builder: pick profile/period, save a file
+  git-recap config       view or change configuration
+  git-recap version      print the version (also --version, -v)
+
+Flags:
   --period PERIOD        standup (default), day/today, yesterday,
                          week/this-week, last-week, month/this-month,
                          last-month, quarter, year, last-7-days, last-30-days
@@ -135,6 +141,10 @@ git-recap version      print the version (also --version, -v)
   --write                also save the recap as markdown in your recaps folder
   --recaps-folder PATH   save there instead of the configured folder
                          (implies --write; one-off, not saved)
+
+Zero config: without a config file, git-recap scans the current directory and
+counts commits by your git user.email. Run `git-recap config` to set up
+workspace roots, profiles, and a recaps folder worth keeping in git.
 ```
 
 - **`standup`** (the default) covers your last working day through now —

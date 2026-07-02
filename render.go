@@ -22,6 +22,59 @@ type Recap struct {
 	Commits []Commit
 }
 
+// RecapStats are aggregates derived from the commits — computed, never stored.
+type RecapStats struct {
+	Commits    int    `json:"commits"`
+	Repos      int    `json:"repos"`
+	ActiveDays int    `json:"active_days"`
+	Busiest    string `json:"busiest_repo,omitempty"` // "slug (N)"
+	Adds       int    `json:"insertions,omitempty"`   // only with --diffstat
+	Dels       int    `json:"deletions,omitempty"`
+}
+
+// Stats aggregates the recap's commits per repo and per day.
+func (r Recap) Stats() RecapStats {
+	s := RecapStats{Commits: len(r.Commits)}
+	perRepo := map[string]int{}
+	days := map[string]bool{}
+	for _, c := range r.Commits {
+		perRepo[c.Repo.Slug()]++
+		days[c.When.Format("2006-01-02")] = true
+		s.Adds += c.Adds
+		s.Dels += c.Dels
+	}
+	s.Repos, s.ActiveDays = len(perRepo), len(days)
+	best, bestN := "", 0
+	for slug, n := range perRepo {
+		if n > bestN || (n == bestN && slug < best) { // deterministic tie-break
+			best, bestN = slug, n
+		}
+	}
+	if bestN > 0 {
+		s.Busiest = fmt.Sprintf("%s (%d)", best, bestN)
+	}
+	return s
+}
+
+// summary is the one-line human form of the stats, shared by term and md.
+func (s RecapStats) summary() string {
+	parts := []string{plural(s.Commits, "commit"), plural(s.Repos, "repo"), plural(s.ActiveDays, "active day")}
+	if s.Repos > 1 {
+		parts = append(parts, "busiest: "+s.Busiest)
+	}
+	if s.Adds+s.Dels > 0 {
+		parts = append(parts, fmt.Sprintf("+%d −%d", s.Adds, s.Dels))
+	}
+	return strings.Join(parts, " · ")
+}
+
+func plural(n int, word string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, word)
+	}
+	return fmt.Sprintf("%d %ss", n, word)
+}
+
 // groupByDay buckets commits by local calendar day (YYYY-MM-DD).
 func groupByDay(commits []Commit) map[string][]Commit {
 	byDay := map[string][]Commit{}
@@ -68,6 +121,7 @@ func renderMarkdown(r Recap) string {
 		b.WriteString("\n_No commits in this period._\n")
 		return b.String()
 	}
+	fmt.Fprintf(&b, "\n_%s_\n", r.Stats().summary())
 	byDay := groupByDay(r.Commits)
 	for _, day := range slices.Sorted(maps.Keys(byDay)) {
 		fmt.Fprintf(&b, "\n## %s\n", day)
@@ -112,11 +166,7 @@ func renderTerm(r Recap) string {
 			}
 		}
 	}
-	repoSet := map[string]bool{}
-	for _, c := range r.Commits {
-		repoSet[c.Repo.Slug()] = true
-	}
-	fmt.Fprintf(&b, "\n%s\n", styleMeta.Render(fmt.Sprintf("%d commits · %d repos", len(r.Commits), len(repoSet))))
+	fmt.Fprintf(&b, "\n%s\n", styleMeta.Render(r.Stats().summary()))
 	return b.String()
 }
 
@@ -136,8 +186,9 @@ func renderJSON(r Recap) string {
 		Period  string       `json:"period"`
 		From    time.Time    `json:"from"`
 		To      time.Time    `json:"to"` // exclusive
+		Stats   RecapStats   `json:"stats"`
 		Commits []jsonCommit `json:"commits"`
-	}{r.Profile, r.Name, r.From, r.To, make([]jsonCommit, 0, len(r.Commits))}
+	}{r.Profile, r.Name, r.From, r.To, r.Stats(), make([]jsonCommit, 0, len(r.Commits))}
 
 	cs := append([]Commit(nil), r.Commits...)
 	sort.Slice(cs, func(i, j int) bool { return cs[i].When.Before(cs[j].When) })

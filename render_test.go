@@ -52,6 +52,10 @@ func TestRenderJSON(t *testing.T) {
 		Period  string    `json:"period"`
 		From    time.Time `json:"from"`
 		To      time.Time `json:"to"`
+		Stats   struct {
+			Commits    int `json:"commits"`
+			ActiveDays int `json:"active_days"`
+		} `json:"stats"`
 		Commits []struct {
 			Hash    string    `json:"hash"`
 			Date    time.Time `json:"date"`
@@ -65,6 +69,9 @@ func TestRenderJSON(t *testing.T) {
 	if out.Profile != "work" || out.Period != "2026-06" || len(out.Commits) != 2 {
 		t.Fatalf("unexpected JSON: %+v", out)
 	}
+	if out.Stats.Commits != 2 || out.Stats.ActiveDays != 1 {
+		t.Errorf("stats = %+v, want 2 commits / 1 active day", out.Stats)
+	}
 	if out.Commits[0].Subject != "Add retry" || out.Commits[0].Repo != "acme/widgets" {
 		t.Errorf("commits not time-ordered or mis-slugged: %+v", out.Commits)
 	}
@@ -77,10 +84,30 @@ func TestRenderJSON(t *testing.T) {
 
 func TestRenderTerm(t *testing.T) {
 	got := renderTerm(testRecap())
-	for _, want := range []string{"acme/widgets", "Add retry", "Fix parser", "2 commits · 1 repos"} {
+	for _, want := range []string{"acme/widgets", "Add retry", "Fix parser", "2 commits · 1 repo · 1 active day"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("term output missing %q in:\n%s", want, got)
 		}
+	}
+}
+
+func TestRecapStats(t *testing.T) {
+	r := testRecap()
+	other := Repo{Org: "acme", Name: "api"}
+	r.Commits = append(r.Commits,
+		Commit{Hash: "cc", When: time.Date(2026, 6, 29, 8, 0, 0, 0, time.UTC), Subject: "x", Repo: other, Adds: 10, Dels: 2})
+	s := r.Stats()
+	if s.Commits != 3 || s.Repos != 2 || s.ActiveDays != 2 {
+		t.Errorf("stats = %+v, want 3 commits, 2 repos, 2 active days", s)
+	}
+	if s.Busiest != "acme/widgets (2)" {
+		t.Errorf("busiest = %q, want acme/widgets (2)", s.Busiest)
+	}
+	if s.Adds != 10 || s.Dels != 2 {
+		t.Errorf("lines = +%d −%d, want +10 −2", s.Adds, s.Dels)
+	}
+	if got := s.summary(); !strings.Contains(got, "busiest: acme/widgets (2)") || !strings.Contains(got, "+10 −2") {
+		t.Errorf("summary = %q", got)
 	}
 }
 
