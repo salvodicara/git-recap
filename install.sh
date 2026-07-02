@@ -1,20 +1,50 @@
 #!/usr/bin/env sh
-# Build git-recap and place the binary on your PATH.
-# Override the destination with PREFIX, e.g. PREFIX=/usr/local/bin ./install.sh
+# Install git-recap: downloads the latest prebuilt release binary for your
+# platform (checksum-verified). No Go toolchain needed.
+#
+#   curl -fsSL https://raw.githubusercontent.com/salvodicara/git-recap/main/install.sh | sh
+#
+# Override the destination with PREFIX, e.g. PREFIX=/usr/local/bin
 set -eu
 
+REPO="salvodicara/git-recap"
 PREFIX="${PREFIX:-$HOME/.local/bin}"
-BIN="git-recap"
 
-command -v go >/dev/null 2>&1 || { echo "error: Go toolchain not found (https://go.dev/dl/)" >&2; exit 1; }
+os=$(uname -s | tr '[:upper:]' '[:lower:]')
+arch=$(uname -m)
+case "$arch" in
+  x86_64) arch=amd64 ;;
+  aarch64 | arm64) arch=arm64 ;;
+  *) echo "error: unsupported architecture $arch — try: go install github.com/$REPO@latest" >&2; exit 1 ;;
+esac
+case "$os" in
+  darwin | linux) ;;
+  *) echo "error: unsupported OS $os — Windows zips: https://github.com/$REPO/releases" >&2; exit 1 ;;
+esac
 
-cd "$(dirname "$0")"
-echo "Building $BIN..."
-go build -o "$BIN" .
+asset="git-recap_${os}_${arch}.tar.gz"
+base="https://github.com/$REPO/releases/latest/download"
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
 
+echo "Downloading $asset..."
+curl -fsSL "$base/$asset" -o "$tmp/$asset"
+curl -fsSL "$base/checksums.txt" -o "$tmp/checksums.txt"
+
+if command -v shasum >/dev/null 2>&1; then
+  sum() { shasum -a 256 -c -; }
+else
+  sum() { sha256sum -c -; }
+fi
+(cd "$tmp" && grep " $asset\$" checksums.txt | sum >/dev/null) || {
+  echo "error: checksum verification failed" >&2
+  exit 1
+}
+
+tar -xzf "$tmp/$asset" -C "$tmp" git-recap
 mkdir -p "$PREFIX"
-mv "$BIN" "$PREFIX/$BIN"
-echo "Installed $PREFIX/$BIN"
+mv "$tmp/git-recap" "$PREFIX/git-recap"
+echo "Installed $PREFIX/git-recap ($("$PREFIX/git-recap" version))"
 
 case ":$PATH:" in
   *":$PREFIX:"*) ;;

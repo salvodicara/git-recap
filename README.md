@@ -3,8 +3,9 @@
 > What did I do since standup? Last month? All year? Your git history knows —
 > `git recap` answers instantly, and can keep a journal you never have to write.
 
+[![CI](https://github.com/salvodicara/git-recap/actions/workflows/ci.yml/badge.svg)](https://github.com/salvodicara/git-recap/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/salvodicara/git-recap)](https://github.com/salvodicara/git-recap/releases/latest)
 [![Go Reference](https://pkg.go.dev/badge/github.com/salvodicara/git-recap.svg)](https://pkg.go.dev/github.com/salvodicara/git-recap)
-[![Go Report Card](https://goreportcard.com/badge/github.com/salvodicara/git-recap)](https://goreportcard.com/report/github.com/salvodicara/git-recap)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 No daemon, no daily capture, no external service, no API keys. Git already
@@ -55,7 +56,19 @@ pushed to GitHub.
 
 `git` (≥ 2.37 recommended) is required at runtime.
 
-**With Go** (one command):
+**Homebrew** (macOS/Linux):
+
+```sh
+brew install salvodicara/tap/git-recap
+```
+
+**curl** (prebuilt binary, checksum-verified, no dependencies):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/salvodicara/git-recap/main/install.sh | sh
+```
+
+**With Go:**
 
 ```sh
 go install github.com/salvodicara/git-recap@latest
@@ -69,16 +82,10 @@ echo 'export PATH="$HOME/go/bin:$PATH"' >> ~/.zshrc   # or ~/.bashrc
 exec $SHELL
 ```
 
-**From source:**
+**Windows:** prebuilt zips are attached to
+[releases](https://github.com/salvodicara/git-recap/releases/latest).
 
-```sh
-git clone https://github.com/salvodicara/git-recap
-cd git-recap
-./install.sh            # builds and installs to ~/.local/bin (override with PREFIX=)
-```
-
-Prebuilt binaries for macOS, Linux, and Windows are attached to
-[releases](https://github.com/salvodicara/git-recap/releases).
+**From source:** `git clone https://github.com/salvodicara/git-recap && cd git-recap && go install .`
 
 ## Quickstart
 
