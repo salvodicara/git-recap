@@ -15,24 +15,7 @@ a markdown journal, or JSON for your scripts.
 Because the binary is named `git-recap`, git picks it up as a subcommand:
 `git recap` works anywhere `git-recap` does.
 
-```
-$ git recap
-
-work — 2026-06-30_2026-07-02
-
-2026-06-30 · Tuesday
-  acme/widgets
-    e8dd688 09:15  Add retry to upload client
-    8779a77 14:32  Fix null check in parser
-  acme/api
-    31c9f01 17:04  Bump timeout on webhook delivery
-
-2026-07-01 · Wednesday
-  acme/widgets
-    77ab2ff 11:23  Ship the new uploader
-
-4 commits · 2 repos
-```
+![git recap in a terminal: one command prints the last working day's commits grouped by day and repo, with a stats summary](demo.gif)
 
 - **Instant, zero config.** `git recap` in any directory shows everything since
   your last working day (on Monday it reaches back to Friday). No setup — it
