@@ -60,14 +60,17 @@ _git_recap() {
     completion) COMPREPLY=($(compgen -W "bash zsh fish" -- "$cur")); return ;;
   esac
   # Subcommands complete right after the command itself; basename handles
-  # ./git-recap and full paths, "recap" covers "git recap <TAB>".
-  case "${prev##*/}" in
-    git-recap|recap)
-      if [[ "$cur" != -* ]]; then
-        COMPREPLY=($(compgen -W "config index completion version help" -- "$cur"))
-        return
-      fi ;;
-  esac
+  # ./git-recap and full paths, "recap" covers "git recap <TAB>". The word
+  # position keeps a later path argument like ~/notes/recap from matching.
+  if [[ $COMP_CWORD -le 2 ]]; then
+    case "${prev##*/}" in
+      git-recap|recap)
+        if [[ "$cur" != -* ]]; then
+          COMPREPLY=($(compgen -W "config index completion version help" -- "$cur"))
+          return
+        fi ;;
+    esac
+  fi
   COMPREPLY=($(compgen -W "--period --from --to --profile --org --repo --pick --fetch --diffstat --format --write --recaps-folder --frontmatter -i" -- "$cur"))
 }
 complete -F _git_recap git-recap
