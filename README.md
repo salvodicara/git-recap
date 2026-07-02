@@ -123,6 +123,7 @@ Usage:
   git-recap              standup recap: everything since your last working day
   git-recap [flags]      recap any period (prints to stdout; --write also saves)
   git-recap -i           interactive builder: pick profile/period, save a file
+  git-recap index        rebuild index.html + per-period pages in the recaps folder
   git-recap config       view or change configuration
   git-recap version      print the version (also --version, -v)
 
@@ -220,6 +221,14 @@ git add . && git commit -m "recaps: June 2026"
 
 Since every file is reconstructible from git history, there's no pressure to
 save eagerly — regenerate any period whenever you need it.
+
+### Your recaps as a website
+
+`git recap index` turns the whole folder into a static site: an `index.html`
+with per-year contribution heatmaps and totals for each profile, plus an
+`.html` page next to every journal file. It reads the journals themselves, so
+it works even for periods whose repos are long gone. Push the folder to GitHub
+Pages (or any static host) and your work journal is a website.
 
 ## Scripts, agents, standup bots
 

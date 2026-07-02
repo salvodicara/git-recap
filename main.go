@@ -57,6 +57,7 @@ Usage:
   git-recap              standup recap: everything since your last working day
   git-recap [flags]      recap any period (prints to stdout; --write also saves)
   git-recap -i           interactive builder: pick profile/period, save a file
+  git-recap index        rebuild index.html + per-period pages in the recaps folder
   git-recap config       view or change configuration
   git-recap version      print the version (also --version, -v)
 
@@ -87,6 +88,12 @@ func main() {
 		case "config":
 			if err := runConfig(os.Args[2:]); err != nil {
 				fmt.Fprintln(os.Stderr, "config:", err)
+				os.Exit(1)
+			}
+			return
+		case "index":
+			if err := runIndex(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, "index:", err)
 				os.Exit(1)
 			}
 			return

@@ -13,33 +13,31 @@ import (
 // CSS handles dark mode. Palette: sequential blue ramp (light→dark, own steps
 // per mode), neutral zero cells, ink tokens for text; low-step contrast is
 // relieved by per-cell tooltips and the listing below (the "table view").
-func renderHTML(r Recap) string {
-	counts := map[string]int{}
-	for _, c := range r.Commits {
-		counts[c.When.Format("2006-01-02")]++
-	}
+// heatCell is one day square in a contribution heatmap.
+type heatCell struct {
+	Date    string
+	Count   int
+	Level   int // 0 = none, 1..4 = quartile of the period's max
+	InRange bool
+}
+
+// buildWeeks lays out Monday-aligned week columns covering [from, to),
+// binning each day's count into levels 1..4 of the period's max.
+func buildWeeks(from, to time.Time, counts map[string]int) [][]heatCell {
 	maxN := 0
 	for _, n := range counts {
 		maxN = max(maxN, n)
 	}
-
-	type cell struct {
-		Date    string
-		Count   int
-		Level   int // 0 = none, 1..4 = quartile of the period's max
-		InRange bool
-	}
-	// Monday-aligned week columns covering [From, To).
-	start := r.From
+	start := from
 	for start.Weekday() != time.Monday {
 		start = start.AddDate(0, 0, -1)
 	}
-	var weeks [][]cell
-	for d := start; d.Before(r.To); {
-		var wk []cell
+	var weeks [][]heatCell
+	for d := start; d.Before(to); {
+		var wk []heatCell
 		for range 7 {
 			key := d.Format("2006-01-02")
-			c := cell{Date: key, Count: counts[key], InRange: !d.Before(r.From) && d.Before(r.To)}
+			c := heatCell{Date: key, Count: counts[key], InRange: !d.Before(from) && d.Before(to)}
 			if c.Count > 0 {
 				c.Level = (c.Count*4 + maxN - 1) / maxN // ceil(4n/max) → 1..4
 			}
@@ -48,6 +46,20 @@ func renderHTML(r Recap) string {
 		}
 		weeks = append(weeks, wk)
 	}
+	return weeks
+}
+
+// dayCounts buckets commit counts per YYYY-MM-DD.
+func dayCounts(commits []Commit) map[string]int {
+	counts := map[string]int{}
+	for _, c := range commits {
+		counts[c.When.Format("2006-01-02")]++
+	}
+	return counts
+}
+
+func renderHTML(r Recap) string {
+	weeks := buildWeeks(r.From, r.To, dayCounts(r.Commits))
 
 	type commitRow struct{ Hash, Time, Subject, Stat string }
 	type repoGroup struct {
@@ -80,24 +92,27 @@ func renderHTML(r Recap) string {
 
 	data := struct {
 		Title, Summary string
-		Weeks          [][]cell
+		Weeks          [][]heatCell
 		Days           []dayGroup
 	}{r.Profile + " — " + r.Name, r.Stats().summary(), weeks, days}
 
 	var b strings.Builder
 	// The template is static and tested; an error here is a programming bug.
-	if err := htmlTmpl.Execute(&b, data); err != nil {
+	if err := htmlTmpl.ExecuteTemplate(&b, "recap", data); err != nil {
 		panic(err)
 	}
 	return b.String()
 }
 
-var htmlTmpl = template.Must(template.New("recap").Parse(`<!doctype html>
+// htmlTmpl holds the shared defines (style, heatmap) plus the two pages:
+// "recap" (one period) and "index" (the whole recaps folder).
+var htmlTmpl = template.Must(template.New("").Parse(`
+{{define "head"}}<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{.Title}}</title>
+<title>{{.}}</title>
 <style>
 :root {
   --surface: #fcfcfb; --page: #f9f9f7;
@@ -117,6 +132,8 @@ body { margin: 0; background: var(--page); color: var(--ink);
   font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
 main { max-width: 860px; margin: 0 auto; padding: 32px 20px 64px; }
 h1 { font-size: 22px; margin: 0 0 4px; }
+h2 { font-size: 17px; margin: 24px 0 8px; }
+a { color: inherit; }
 .summary { color: var(--ink-2); margin: 0 0 24px; }
 .card { background: var(--surface); border: 1px solid var(--ring);
   border-radius: 8px; padding: 16px; margin-bottom: 24px; overflow-x: auto; }
@@ -143,17 +160,20 @@ li { padding: 2px 0; }
   font-variant-numeric: tabular-nums; margin-right: 6px; }
 .stat { color: var(--ink-3); font-size: 12px; margin-left: 6px; }
 .empty { color: var(--ink-2); }
+.periods { width: 100%; border-collapse: collapse; }
+.periods td { padding: 4px 12px 4px 0; border-top: 1px solid var(--hairline); }
+.periods .n { color: var(--ink-3); text-align: right; }
 </style>
 </head>
 <body>
 <main>
-<h1>{{.Title}}</h1>
-<p class="summary">{{.Summary}}</p>
-<div class="card">
+{{end}}
+
+{{define "heatmap"}}
   <div class="heatmap">
     <div class="wdays"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
     <div class="grid">
-    {{- range .Weeks}}{{range .}}
+    {{- range .}}{{range .}}
       <i class="{{if not .InRange}}out{{else if .Level}}l{{.Level}}{{end}}" title="{{.Date}} · {{.Count}} commits"></i>
     {{- end}}{{end}}
     </div>
@@ -161,7 +181,12 @@ li { padding: 2px 0; }
   <div class="legend">Less
     <i style="background:var(--lvl0)"></i><i style="background:var(--lvl1)"></i><i style="background:var(--lvl2)"></i><i style="background:var(--lvl3)"></i><i style="background:var(--lvl4)"></i>
   More</div>
-</div>
+{{end}}
+
+{{define "recap"}}{{template "head" .Title}}
+<h1>{{.Title}}</h1>
+<p class="summary">{{.Summary}}</p>
+<div class="card">{{template "heatmap" .Weeks}}</div>
 {{if not .Days}}<p class="empty">No commits in this period.</p>{{end}}
 {{- range .Days}}
 <details open>
@@ -179,4 +204,27 @@ li { padding: 2px 0; }
 </main>
 </body>
 </html>
+{{end}}
+
+{{define "index"}}{{template "head" "recaps"}}
+<h1>Recaps</h1>
+<p class="summary">Generated by git-recap — one heatmap per profile and year.</p>
+{{- range .Profiles}}
+<h2>{{.Name}}</h2>
+{{- range .Years}}
+<div class="card">
+  <p class="summary">{{.Year}} · {{.Total}} commits</p>
+  {{template "heatmap" .Weeks}}
+  <table class="periods">
+  {{- range .Periods}}
+    <tr><td><a href="{{.Href}}">{{.Name}}</a></td><td class="n">{{.Commits}} commits</td></tr>
+  {{- end}}
+  </table>
+</div>
+{{- end}}
+{{- end}}
+</main>
+</body>
+</html>
+{{end}}
 `))
