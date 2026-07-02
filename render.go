@@ -72,6 +72,16 @@ func (s RecapStats) summary() string {
 	return strings.Join(parts, " · ")
 }
 
+// yamlQuote makes an arbitrary string a safe YAML scalar (profile names are
+// unvalidated user input — ':', '#', quotes would corrupt the frontmatter).
+func yamlQuote(s string) string {
+	return `"` + strings.ReplaceAll(strings.ReplaceAll(s, `\`, `\\`), `"`, `\"`) + `"`
+}
+
+// outputFormats are the --format values; main validates against this list and
+// completions offer it, so the two can't drift.
+var outputFormats = []string{"term", "md", "json", "html"}
+
 func plural(n int, word string) string {
 	if n == 1 {
 		return fmt.Sprintf("%d %s", n, word)
@@ -121,8 +131,8 @@ func byRepo(commits []Commit) map[string][]Commit {
 func renderMarkdown(r Recap) string {
 	var b strings.Builder
 	if r.Frontmatter {
-		fmt.Fprintf(&b, "---\ntitle: %s — %s\nprofile: %s\nperiod: %s\nfrom: %s\nto: %s\ncommits: %d\n---\n\n",
-			r.Profile, r.Name, r.Profile, r.Name,
+		fmt.Fprintf(&b, "---\ntitle: %s\nprofile: %s\nperiod: %s\nfrom: %s\nto: %s\ncommits: %d\n---\n\n",
+			yamlQuote(r.Profile+" — "+r.Name), yamlQuote(r.Profile), yamlQuote(r.Name),
 			r.From.Format("2006-01-02"), r.To.AddDate(0, 0, -1).Format("2006-01-02"), len(r.Commits))
 	}
 	fmt.Fprintf(&b, "# %s — %s\n", r.Profile, r.Name)

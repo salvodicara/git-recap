@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"time"
 )
@@ -168,9 +169,7 @@ func runGenerate(argv []string) error {
 			outFormat = "term"
 		}
 	}
-	switch outFormat {
-	case "term", "md", "markdown", "json", "html":
-	default:
+	if !slices.Contains(outputFormats, outFormat) && outFormat != "markdown" {
 		return fmt.Errorf("invalid --format %q (term|md|json|html)", outFormat)
 	}
 

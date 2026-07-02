@@ -28,25 +28,10 @@ type heatmapData struct {
 	Weeks  [][]heatCell
 }
 
-// buildHeatmap builds the week grid and labels each column where a month
-// begins in-range.
+// buildHeatmap lays out Monday-aligned week columns covering [from, to),
+// binning each day's count into levels 1..4 of the period's max, and labels
+// each column where a month begins in-range.
 func buildHeatmap(from, to time.Time, counts map[string]int) heatmapData {
-	weeks := buildWeeks(from, to, counts)
-	months := make([]string, len(weeks))
-	for i, wk := range weeks {
-		for _, c := range wk {
-			if c.InRange && strings.HasSuffix(c.Date, "-01") {
-				t, _ := time.Parse("2006-01-02", c.Date)
-				months[i] = t.Format("Jan")
-			}
-		}
-	}
-	return heatmapData{Months: months, Weeks: weeks}
-}
-
-// buildWeeks lays out Monday-aligned week columns covering [from, to),
-// binning each day's count into levels 1..4 of the period's max.
-func buildWeeks(from, to time.Time, counts map[string]int) [][]heatCell {
 	maxN := 0
 	for _, n := range counts {
 		maxN = max(maxN, n)
@@ -55,21 +40,26 @@ func buildWeeks(from, to time.Time, counts map[string]int) [][]heatCell {
 	for start.Weekday() != time.Monday {
 		start = start.AddDate(0, 0, -1)
 	}
-	var weeks [][]heatCell
+	var h heatmapData
 	for d := start; d.Before(to); {
 		var wk []heatCell
+		month := ""
 		for range 7 {
 			key := d.Format("2006-01-02")
 			c := heatCell{Date: key, Count: counts[key], InRange: !d.Before(from) && d.Before(to)}
 			if c.Count > 0 {
 				c.Level = (c.Count*4 + maxN - 1) / maxN // ceil(4n/max) → 1..4
 			}
+			if c.InRange && d.Day() == 1 {
+				month = d.Format("Jan")
+			}
 			wk = append(wk, c)
 			d = d.AddDate(0, 0, 1)
 		}
-		weeks = append(weeks, wk)
+		h.Weeks = append(h.Weeks, wk)
+		h.Months = append(h.Months, month)
 	}
-	return weeks
+	return h
 }
 
 func renderHTML(r Recap) string {

@@ -101,6 +101,15 @@ func TestRunIndexNeverTouchesForeignFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "notes.html"), []byte("PRECIOUS"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// A frontmattered note whose body mimics a journal heading: foreign
+	// frontmatter must NOT be stripped, so the file stays untouched.
+	crafted := "---\nfoo: bar\n---\n\n# work — crafted\n"
+	if err := os.WriteFile(filepath.Join(dir, "crafted.md"), []byte(crafted), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "crafted.html"), []byte("ALSO PRECIOUS"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := runIndex([]string{"--recaps-folder", root}); err != nil {
 		t.Fatal(err)
@@ -109,7 +118,11 @@ func TestRunIndexNeverTouchesForeignFiles(t *testing.T) {
 	if err != nil || string(got) != "PRECIOUS" {
 		t.Errorf("notes.html was overwritten: %q, %v", got, err)
 	}
-	if idx, _ := os.ReadFile(filepath.Join(root, "index.html")); strings.Contains(string(idx), "notes") {
+	got, err = os.ReadFile(filepath.Join(dir, "crafted.html"))
+	if err != nil || string(got) != "ALSO PRECIOUS" {
+		t.Errorf("crafted.html was overwritten: %q, %v", got, err)
+	}
+	if idx, _ := os.ReadFile(filepath.Join(root, "index.html")); strings.Contains(string(idx), "notes") || strings.Contains(string(idx), "crafted") {
 		t.Error("foreign markdown leaked into the index")
 	}
 }
