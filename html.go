@@ -21,6 +21,29 @@ type heatCell struct {
 	InRange bool
 }
 
+// heatmapData is one heatmap: week columns plus a month label per column
+// ("" when no month starts that week).
+type heatmapData struct {
+	Months []string
+	Weeks  [][]heatCell
+}
+
+// buildHeatmap builds the week grid and labels each column where a month
+// begins in-range.
+func buildHeatmap(from, to time.Time, counts map[string]int) heatmapData {
+	weeks := buildWeeks(from, to, counts)
+	months := make([]string, len(weeks))
+	for i, wk := range weeks {
+		for _, c := range wk {
+			if c.InRange && strings.HasSuffix(c.Date, "-01") {
+				t, _ := time.Parse("2006-01-02", c.Date)
+				months[i] = t.Format("Jan")
+			}
+		}
+	}
+	return heatmapData{Months: months, Weeks: weeks}
+}
+
 // buildWeeks lays out Monday-aligned week columns covering [from, to),
 // binning each day's count into levels 1..4 of the period's max.
 func buildWeeks(from, to time.Time, counts map[string]int) [][]heatCell {
@@ -54,7 +77,7 @@ func renderHTML(r Recap) string {
 	for _, c := range r.Commits {
 		counts[c.When.Format("2006-01-02")]++
 	}
-	weeks := buildWeeks(r.From, r.To, counts)
+	heat := buildHeatmap(r.From, r.To, counts)
 
 	type commitRow struct{ Hash, Time, Subject, Stat string }
 	type repoGroup struct {
@@ -87,9 +110,9 @@ func renderHTML(r Recap) string {
 
 	data := struct {
 		Title, Summary string
-		Weeks          [][]heatCell
+		Heat           heatmapData
 		Days           []dayGroup
-	}{r.Profile + " — " + r.Name, r.Stats().summary(), weeks, days}
+	}{r.Profile + " — " + r.Name, r.Stats().summary(), heat, days}
 
 	var b strings.Builder
 	// The template is static and tested; an error here is a programming bug.
@@ -134,8 +157,11 @@ a { color: inherit; }
   border-radius: 8px; padding: 16px; margin-bottom: 24px; overflow-x: auto; }
 .heatmap { display: flex; gap: 8px; align-items: flex-start; }
 .wdays { display: grid; grid-template-rows: repeat(7, 12px); gap: 2px;
-  font-size: 10px; color: var(--ink-3); }
+  font-size: 10px; color: var(--ink-3); padding-top: 16px; }
 .wdays span:nth-child(even) { visibility: hidden; }
+.months { display: grid; grid-auto-flow: column; grid-auto-columns: 12px;
+  gap: 2px; height: 12px; margin-bottom: 4px; font-size: 10px; color: var(--ink-3); }
+.months span { overflow: visible; white-space: nowrap; }
 .grid { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 12px);
   grid-auto-columns: 12px; gap: 2px; }
 .grid i { border-radius: 3px; background: var(--lvl0); }
@@ -167,10 +193,13 @@ li { padding: 2px 0; }
 {{define "heatmap"}}
   <div class="heatmap">
     <div class="wdays"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
-    <div class="grid">
-    {{- range .}}{{range .}}
-      <i class="{{if not .InRange}}out{{else if .Level}}l{{.Level}}{{end}}" title="{{.Date}} · {{plural .Count "commit"}}"></i>
-    {{- end}}{{end}}
+    <div>
+      <div class="months">{{range .Months}}<span>{{.}}</span>{{end}}</div>
+      <div class="grid">
+      {{- range .Weeks}}{{range .}}
+        <i class="{{if not .InRange}}out{{else if .Level}}l{{.Level}}{{end}}" title="{{.Date}} · {{plural .Count "commit"}}"></i>
+      {{- end}}{{end}}
+      </div>
     </div>
   </div>
   <div class="legend">Less
@@ -181,7 +210,7 @@ li { padding: 2px 0; }
 {{define "recap"}}{{template "head" .Title}}
 <h1>{{.Title}}</h1>
 <p class="summary">{{.Summary}}</p>
-<div class="card">{{template "heatmap" .Weeks}}</div>
+<div class="card">{{template "heatmap" .Heat}}</div>
 {{if not .Days}}<p class="empty">No commits in this period.</p>{{end}}
 {{- range .Days}}
 <details open>
@@ -209,7 +238,7 @@ li { padding: 2px 0; }
 {{- range .Years}}
 <div class="card">
   <p class="summary">{{.Year}} · {{plural .Total "commit"}}</p>
-  {{template "heatmap" .Weeks}}
+  {{template "heatmap" .Heat}}
   <table class="periods">
   {{- range .Periods}}
     <tr><td><a href="{{.Href}}">{{.Name}}</a></td><td class="n">{{plural .Commits "commit"}}</td></tr>

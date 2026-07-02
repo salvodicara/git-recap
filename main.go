@@ -59,6 +59,7 @@ Usage:
   git-recap -i           interactive builder: pick profile/period, save a file
   git-recap index        rebuild index.html + per-period pages in the recaps folder
   git-recap config       view or change configuration
+  git-recap completion SHELL   print shell completions (bash, zsh, fish)
   git-recap version      print the version (also --version, -v)
 
 Flags:
@@ -96,6 +97,16 @@ func main() {
 		case "index":
 			if err := runIndex(os.Args[2:]); err != nil {
 				fmt.Fprintln(os.Stderr, "index:", err)
+				os.Exit(1)
+			}
+			return
+		case "completion":
+			shell := ""
+			if len(os.Args) > 2 {
+				shell = os.Args[2]
+			}
+			if err := runCompletion(shell); err != nil {
+				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
 			return

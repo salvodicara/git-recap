@@ -87,6 +87,14 @@ exec $SHELL
 
 **From source:** `git clone https://github.com/salvodicara/git-recap && cd git-recap && go install .`
 
+**Shell completions** (flags, period and format values; works for `git recap` too):
+
+```sh
+source <(git-recap completion bash)                                    # bash (add to ~/.bashrc)
+git-recap completion zsh > "${fpath[1]}/_git-recap" && compinit        # zsh
+git-recap completion fish > ~/.config/fish/completions/git-recap.fish # fish
+```
+
 ## Quickstart
 
 ```sh
@@ -115,6 +123,7 @@ Usage:
   git-recap -i           interactive builder: pick profile/period, save a file
   git-recap index        rebuild index.html + per-period pages in the recaps folder
   git-recap config       view or change configuration
+  git-recap completion SHELL   print shell completions (bash, zsh, fish)
   git-recap version      print the version (also --version, -v)
 
 Flags:

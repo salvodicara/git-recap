@@ -179,7 +179,7 @@ func runIndex(argv []string) error {
 	type indexYear struct {
 		Year    string
 		Total   int
-		Weeks   [][]heatCell
+		Heat    heatmapData
 		Periods []indexPeriod
 	}
 	type indexProfile struct {
@@ -207,7 +207,7 @@ func runIndex(argv []string) error {
 				}
 			}
 			jan1 := time.Date(mustAtoi(y), 1, 1, 0, 0, 0, 0, time.Local)
-			iy := indexYear{Year: y, Total: total, Weeks: buildWeeks(jan1, jan1.AddDate(1, 0, 0), yearCounts)}
+			iy := indexYear{Year: y, Total: total, Heat: buildHeatmap(jan1, jan1.AddDate(1, 0, 0), yearCounts)}
 			for _, period := range slices.Sorted(maps.Keys(agg.periods[y])) {
 				iy.Periods = append(iy.Periods, indexPeriod{
 					Name: period, Href: name + "/" + y + "/" + period + ".html", Commits: agg.periods[y][period],
