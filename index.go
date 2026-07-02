@@ -285,9 +285,16 @@ func stripFrontmatter(s, profile, period string) string {
 		return s
 	}
 	head, body, ok := strings.Cut(rest, "\n---\n")
-	if !ok ||
-		!strings.Contains(head, "\nprofile: "+yamlQuote(profile)) ||
-		!strings.Contains(head, "\nperiod: "+yamlQuote(period)) {
+	if !ok {
+		return s
+	}
+	// Tolerant reader: accept the current quoted form and the unquoted form
+	// early builds wrote, so no journal is ever orphaned by an upgrade.
+	has := func(key, val string) bool {
+		return strings.Contains(head, "\n"+key+": "+yamlQuote(val)) ||
+			strings.Contains(head+"\n", "\n"+key+": "+val+"\n")
+	}
+	if !has("profile", profile) || !has("period", period) {
 		return s
 	}
 	return strings.TrimPrefix(body, "\n")

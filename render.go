@@ -73,9 +73,12 @@ func (s RecapStats) summary() string {
 }
 
 // yamlQuote makes an arbitrary string a safe YAML scalar (profile names are
-// unvalidated user input — ':', '#', quotes would corrupt the frontmatter).
+// unvalidated user input — ':', '#', quotes, newlines would corrupt the
+// frontmatter or break its block structure).
+var yamlEscaper = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`, "\r", `\r`, "\t", `\t`)
+
 func yamlQuote(s string) string {
-	return `"` + strings.ReplaceAll(strings.ReplaceAll(s, `\`, `\\`), `"`, `\"`) + `"`
+	return `"` + yamlEscaper.Replace(s) + `"`
 }
 
 // outputFormats are the --format values; main validates against this list and

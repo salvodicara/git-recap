@@ -170,7 +170,7 @@ func runGenerate(argv []string) error {
 		}
 	}
 	if !slices.Contains(outputFormats, outFormat) && outFormat != "markdown" {
-		return fmt.Errorf("invalid --format %q (term|md|json|html)", outFormat)
+		return fmt.Errorf("invalid --format %q (%s)", outFormat, strings.Join(outputFormats, "|"))
 	}
 
 	cfg, cfgPath, err := loadConfig()
