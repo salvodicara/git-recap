@@ -87,7 +87,9 @@ exec $SHELL
 
 **From source:** `git clone https://github.com/salvodicara/git-recap && cd git-recap && go install .`
 
-**Shell completions** (flags, period and format values; works for `git recap` too):
+**Shell completions** (flags, period and format values; works for `git recap`
+too). Homebrew installs them automatically; the curl installer sets up fish
+for you; otherwise wire them in once:
 
 ```sh
 source <(git-recap completion bash)                                    # bash (add to ~/.bashrc)

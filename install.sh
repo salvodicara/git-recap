@@ -46,6 +46,15 @@ mkdir -p "$PREFIX"
 mv "$tmp/git-recap" "$PREFIX/git-recap"
 echo "Installed $PREFIX/git-recap ($("$PREFIX/git-recap" version))"
 
+# Completions: fish auto-loads from its user dir, so install those directly;
+# bash/zsh rc files are yours — we only print the line to add.
+if command -v fish >/dev/null 2>&1; then
+  fish_dir="$HOME/.config/fish/completions"
+  mkdir -p "$fish_dir"
+  "$PREFIX/git-recap" completion fish > "$fish_dir/git-recap.fish" && echo "Installed fish completions."
+fi
+echo "Completions (bash/zsh): add to your shell rc — see \`git-recap completion\` or the README."
+
 case ":$PATH:" in
   *":$PREFIX:"*) ;;
   *) echo "note: $PREFIX is not on your PATH — add it to use \`git-recap\` / \`git recap\`." ;;
