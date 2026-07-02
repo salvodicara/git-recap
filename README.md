@@ -43,22 +43,46 @@ pushed to GitHub.
 
 ## Install
 
+**Homebrew** (macOS/Linux):
+
 ```sh
-brew install salvodicara/tap/git-recap                                      # Homebrew (macOS/Linux)
-curl -fsSL https://raw.githubusercontent.com/salvodicara/git-recap/main/install.sh | sh   # prebuilt binary, checksum-verified
-go install github.com/salvodicara/git-recap@latest                          # Go (needs ~/go/bin on PATH)
+brew install salvodicara/tap/git-recap
+```
+
+**curl** — prebuilt binary, checksum-verified:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/salvodicara/git-recap/main/install.sh | sh
+```
+
+**Go** (needs `~/go/bin` on `PATH`):
+
+```sh
+go install github.com/salvodicara/git-recap@latest
 ```
 
 Windows zips are on the [releases page](https://github.com/salvodicara/git-recap/releases/latest).
 `git` ≥ 2.37 recommended at runtime.
 
-**Shell completions:** Homebrew installs them automatically, the curl
-installer sets up fish; otherwise wire them in once:
+**Shell completions** — Homebrew installs them automatically and the curl
+installer sets up fish; otherwise wire yours in once.
+
+bash (add to `~/.bashrc`):
 
 ```sh
-source <(git-recap completion bash)                                    # bash (add to ~/.bashrc)
-git-recap completion zsh > "${fpath[1]}/_git-recap" && compinit        # zsh
-git-recap completion fish > ~/.config/fish/completions/git-recap.fish # fish
+source <(git-recap completion bash)
+```
+
+zsh:
+
+```sh
+git-recap completion zsh > "${fpath[1]}/_git-recap" && compinit
+```
+
+fish:
+
+```sh
+git-recap completion fish > ~/.config/fish/completions/git-recap.fish
 ```
 
 ## Quickstart
